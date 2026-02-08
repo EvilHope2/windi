@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Logística On Demand</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+<script src="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.js"></script>
+<link href="https://api.mapbox.com/mapbox-gl-js/v2.15.0/mapbox-gl.css" rel="stylesheet">
+</head>
+
+<body class="bg-gray-100">
+
+<header class="bg-black text-white p-4 text-center font-bold">
+🚚 Logística On Demand
+</header>
+
+<!-- LOGIN -->
+<section id="auth" class="max-w-md mx-auto mt-10 bg-white p-6 rounded shadow">
+<h2 class="text-center font-bold mb-4">Login / Registro</h2>
+
+<input id="email" class="w-full border p-2 mb-2 rounded" placeholder="Email">
+<input id="password" type="password" class="w-full border p-2 mb-2 rounded" placeholder="Contraseña">
+
+<select id="rol" class="w-full border p-2 mb-2 rounded">
+<option value="comercio">🏪 Comercio</option>
+<option value="repartidor">🛵 Repartidor</option>
+</select>
+
+<button onclick="register()" class="w-full bg-gray-600 text-white p-2 rounded mb-2">
+Registrarse
+</button>
+
+<button onclick="login()" class="w-full bg-blue-600 text-white p-2 rounded">
+Ingresar
+</button>
+</section>
+
+<!-- APP -->
+<section id="app" class="hidden max-w-xl mx-auto mt-6 bg-white p-6 rounded shadow">
+<h3 id="titulo" class="font-bold mb-4"></h3>
+
+<div id="comercio">
+<input id="origen" class="w-full border p-2 mb-2 rounded" placeholder="Origen">
+<input id="destino" class="w-full border p-2 mb-2 rounded" placeholder="Destino">
+
+<select id="vehiculo" class="w-full border p-2 mb-2 rounded">
+<option value="bici">🚲 Bici</option>
+<option value="moto">🏍️ Moto</option>
+<option value="auto">🚗 Auto</option>
+</select>
+
+<div id="map" class="h-64 mb-2"></div>
+<p id="precio" class="text-center font-bold text-green-600"></p>
+
+<button onclick="crearPedido()" class="w-full bg-blue-600 text-white p-2 rounded">
+Pedir envío
+</button>
+</div>
+
+<div id="repartidor" class="hidden">
+<ul id="lista" class="space-y-2"></ul>
+</div>
+</section>
+
+<script>
+mapboxgl.accessToken = 'PEGÁ_TU_TOKEN_MAPBOX';
+const socket = io('http://localhost:3000');
+let map, km = 0, user;
+
+function register() {
+  fetch('http://localhost:3000/register', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({
+      email: email.value,
+      password: password.value,
+      rol: rol.value
+    })
+  }).then(() => alert('Usuario creado'));
+}
+
+function login() {
+  fetch('http://localhost:3000/login', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({
+      email: email.value,
+      password: password.value
+    })
+  })
+  .then(r => r.json())
+  .then(u => {
+    user = u;
+    auth.classList.add('hidden');
+    app.classList.remove('hidden');
+    titulo.innerText = `Hola ${u.email} (${u.rol})`;
+
+    if (u.rol === 'comercio') {
+      initMap();
+      repartidor.classList.add('hidden');
+    } else {
+      comercio.classList.add('hidden');
+      cargarPedidos();
+    }
+  });
+}
+
+// MAPA
+function initMap() {
+  map = new mapboxgl.Map({
+    container: 'map',
+    style: 'mapbox://styles/mapbox/streets-v11',
+    center: [-58.38, -34.60],
+    zoom: 12
+  });
+}
+
+function crearPedido() {
+  fetch('http://localhost:3000/pedido', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({
+      origen: origen.value,
+      destino: destino.value,
+      km: 5,
+      vehiculo: vehiculo.value
+    })
+  })
+  .then(r => r.json())
+  .then(p => precio.innerText = `$${p.precio}`);
+}
+
+function cargarPedidos() {
+  fetch('http://localhost:3000/pedidos')
+    .then(r => r.json())
+    .then(data => {
+      lista.innerHTML = '';
+      data.forEach(p => {
+        const li = document.createElement('li');
+        li.innerHTML = `${p.origen} → ${p.destino} $${p.precio}
+        <button onclick="aceptar(${p.id})">Aceptar</button>`;
+        lista.appendChild(li);
+      });
+    });
+}
+
+function aceptar(id) {
+  fetch(`http://localhost:3000/pedido/${id}/aceptar`, { method: 'POST' })
+    .then(() => empezarTracking(id));
+}
+
+function empezarTracking(id) {
+  navigator.geolocation.watchPosition(pos => {
+    socket.emit('ubicacion-repartidor', {
+      pedidoId: id,
+      lat: pos.coords.latitude,
+      lng: pos.coords.longitude
+    });
+  });
+}
+</script>
+
+</body>
+</html>
