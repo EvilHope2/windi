@@ -45,6 +45,41 @@ let routeCoords = [];
 
 let activeOrder = null;
 let watchId = null;
+const DEFAULT_CURRENCY = 'ARS';
+
+function buildDefaultWallet(now = Date.now()) {
+  return {
+    balance: 0,
+    pending: 0,
+    totalEarned: 0,
+    totalCommissions: 0,
+    totalWithdrawn: 0,
+    currency: DEFAULT_CURRENCY,
+    createdAt: now,
+    updatedAt: now
+  };
+}
+
+async function ensureWallet(uid) {
+  const walletRef = ref(db, `wallets/${uid}`);
+  const snap = await get(walletRef);
+  const now = Date.now();
+  if (!snap.exists()) {
+    await set(walletRef, buildDefaultWallet(now));
+    return;
+  }
+  const wallet = snap.val() || {};
+  const patch = {};
+  if (typeof wallet.balance !== 'number') patch.balance = 0;
+  if (typeof wallet.pending !== 'number') patch.pending = 0;
+  if (typeof wallet.totalEarned !== 'number') patch.totalEarned = 0;
+  if (typeof wallet.totalCommissions !== 'number') patch.totalCommissions = 0;
+  if (typeof wallet.totalWithdrawn !== 'number') patch.totalWithdrawn = 0;
+  if (!wallet.currency) patch.currency = DEFAULT_CURRENCY;
+  if (!wallet.createdAt) patch.createdAt = now;
+  patch.updatedAt = now;
+  await update(walletRef, patch);
+}
 
 function setStatus(msg) {
   statusEl.textContent = msg || '';
@@ -111,8 +146,8 @@ function updateRoute(loc) {
 function setActiveOrder(order, id) {
   if (!order) {
     activeOrder = null;
-    activoInfo.textContent = 'No hay pedido activo.';
-    mapInfo.textContent = 'Activa el tracking para ver el mapa.';
+    activoInfo.textContent = 'No hay pedido activo. Acepta uno desde "Pedidos disponibles".';
+    mapInfo.textContent = 'Acepta un pedido y toca "Iniciar tracking" para ver el mapa.';
     return;
   }
   activeOrder = { id, trackingToken: order.trackingToken };
@@ -132,13 +167,17 @@ async function stopTracking() {
 function renderWallet(data) {
   const balance = data?.balance ?? 0;
   const pending = data?.pending ?? 0;
-  walletBalance.textContent = `Saldo: ${fmtMoney(balance)}`;
-  walletPending.textContent = `Pendiente: ${fmtMoney(pending)}`;
+  const currency = data?.currency || DEFAULT_CURRENCY;
+  walletBalance.textContent = `Saldo (${currency}): ${fmtMoney(balance)}`;
+  walletPending.textContent = `Pendiente (${currency}): ${fmtMoney(pending)}`;
 }
 
 function renderWalletTx(data) {
   walletTx.innerHTML = '';
-  if (!data) return;
+  if (!data) {
+    walletTx.innerHTML = '<div class="item"><div class="muted">Todavia no hay movimientos en tu wallet.</div></div>';
+    return;
+  }
   Object.entries(data).reverse().forEach(([, tx]) => {
     const div = document.createElement('div');
     div.className = 'item';
@@ -165,7 +204,7 @@ withdrawBtn.addEventListener('click', async () => {
 
   const walletRef = ref(db, `wallets/${user.uid}`);
   const snap = await get(walletRef);
-  const wallet = snap.val() || { balance: 0, pending: 0 };
+  const wallet = snap.val() || buildDefaultWallet();
   if (amount > wallet.balance) {
     return setStatus('Saldo insuficiente.');
   }
@@ -173,8 +212,14 @@ withdrawBtn.addEventListener('click', async () => {
   const now = Date.now();
   const newBalance = wallet.balance - amount;
   const newPending = (wallet.pending || 0) + amount;
+  const newTotalWithdrawn = (wallet.totalWithdrawn || 0) + amount;
 
-  await update(walletRef, { balance: newBalance, pending: newPending, updatedAt: now });
+  await update(walletRef, {
+    balance: newBalance,
+    pending: newPending,
+    totalWithdrawn: newTotalWithdrawn,
+    updatedAt: now
+  });
   const txRef = push(ref(db, `walletTx/${user.uid}`));
   await set(txRef, { type: 'withdraw', amount, createdAt: now, status: 'pending' });
   const wRef = push(ref(db, `walletWithdrawals/${user.uid}`));
@@ -205,6 +250,7 @@ qs('signupBtn').addEventListener('click', async () => {
       email,
       role: 'repartidor'
     });
+    await ensureWallet(cred.user.uid);
   } catch (err) {
     setStatus(err.message);
   }
@@ -255,19 +301,21 @@ deliverBtn.addEventListener('click', async () => {
 
     const walletRef = ref(db, `wallets/${auth.currentUser.uid}`);
     const wSnap = await get(walletRef);
-    const wallet = wSnap.val() || { balance: 0, pending: 0 };
+    const wallet = wSnap.val() || buildDefaultWallet();
 
     if (!order.payoutApplied) {
       if (order.pagoMetodo === 'cash_delivery') {
         const comision = order.comision ?? 0;
         const newBalance = (wallet.balance || 0) - comision;
-        await update(walletRef, { balance: newBalance, updatedAt: now });
+        const totalCommissions = (wallet.totalCommissions || 0) + Math.abs(comision);
+        await update(walletRef, { balance: newBalance, totalCommissions, updatedAt: now });
         const txRef = push(ref(db, `walletTx/${auth.currentUser.uid}`));
         await set(txRef, { type: 'commission', amount: -comision, createdAt: now, orderId: activeOrder.id });
       } else {
         const payout = order.payout ?? order.precio ?? 0;
         const newBalance = (wallet.balance || 0) + payout;
-        await update(walletRef, { balance: newBalance, updatedAt: now });
+        const totalEarned = (wallet.totalEarned || 0) + payout;
+        await update(walletRef, { balance: newBalance, totalEarned, updatedAt: now });
         const txRef = push(ref(db, `walletTx/${auth.currentUser.uid}`));
         await set(txRef, { type: 'credit', amount: payout, createdAt: now, orderId: activeOrder.id });
       }
@@ -316,7 +364,7 @@ cancelBtn.addEventListener('click', async () => {
 function renderPedidos(data) {
   pedidosList.innerHTML = '';
   if (!data) {
-    pedidosList.innerHTML = '<div class="muted">No hay pedidos disponibles.</div>';
+    pedidosList.innerHTML = '<div class="item"><div class="muted">No hay pedidos disponibles ahora. Actualiza en unos segundos.</div></div>';
     return;
   }
 
@@ -387,6 +435,7 @@ onAuthStateChanged(auth, (user) => {
     authSection.classList.add('hidden');
     appSection.classList.remove('hidden');
     setStatus('');
+    ensureWallet(user.uid).catch((err) => setStatus(err.message));
 
     const q = query(ref(db, 'orders'), orderByChild('estado'), equalTo('buscando'));
     onValue(q, (ordersSnap) => renderPedidos(ordersSnap.val()));
