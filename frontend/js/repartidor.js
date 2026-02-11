@@ -85,6 +85,14 @@ function setStatus(msg) {
   statusEl.textContent = msg || '';
 }
 
+function refreshActionButtons() {
+  const hasActive = !!activeOrder;
+  startTrackingBtn.disabled = !hasActive;
+  stopTrackingBtn.disabled = watchId === null;
+  deliverBtn.disabled = !hasActive;
+  cancelBtn.disabled = !hasActive;
+}
+
 function ensureMap(loc) {
   if (!map || !window.mapboxgl) {
     if (!window.mapboxgl) return;
@@ -148,6 +156,7 @@ function setActiveOrder(order, id) {
     activeOrder = null;
     activoInfo.textContent = 'No hay pedido activo. Acepta uno desde "Pedidos disponibles".';
     mapInfo.textContent = 'Acepta un pedido y toca "Iniciar tracking" para ver el mapa.';
+    refreshActionButtons();
     return;
   }
   activeOrder = { id, trackingToken: order.trackingToken };
@@ -155,6 +164,7 @@ function setActiveOrder(order, id) {
   const payout = order.payout ?? order.precio;
   const pagoLabel = order.pagoMetodo === 'cash_delivery' ? 'Efectivo (cobras total)' : 'Comercio paga envio';
   activoInfo.textContent = `${order.origen} -> ${order.destino} | ${kmText} | ${fmtMoney(payout)} | ${pagoLabel}`;
+  refreshActionButtons();
 }
 
 async function stopTracking() {
@@ -162,6 +172,7 @@ async function stopTracking() {
     navigator.geolocation.clearWatch(watchId);
     watchId = null;
   }
+  refreshActionButtons();
 }
 
 function renderWallet(data) {
@@ -283,6 +294,7 @@ startTrackingBtn.addEventListener('click', () => {
   );
 
   setStatus('Tracking activo.');
+  refreshActionButtons();
 });
 
 stopTrackingBtn.addEventListener('click', () => {
@@ -290,7 +302,7 @@ stopTrackingBtn.addEventListener('click', () => {
   setStatus('Tracking detenido.');
 });
 
-deliverBtn.addEventListener('click', async () => {
+async function markDelivered() {
   if (!activeOrder) return setStatus('No hay pedido activo.');
   const now = Date.now();
   try {
@@ -298,6 +310,12 @@ deliverBtn.addEventListener('click', async () => {
     const snap = await get(orderRef);
     const order = snap.val();
     if (!order) return setStatus('Pedido no encontrado.');
+    if (order.repartidorId !== auth.currentUser.uid) {
+      return setStatus('Este pedido no esta asignado a tu cuenta.');
+    }
+    if (order.estado !== 'en-camino') {
+      return setStatus('Solo puedes entregar pedidos en estado en-camino.');
+    }
 
     const walletRef = ref(db, `wallets/${auth.currentUser.uid}`);
     const wSnap = await get(walletRef);
@@ -327,10 +345,12 @@ deliverBtn.addEventListener('click', async () => {
       updatedAt: now,
       payoutApplied: true
     });
-    await update(ref(db, `publicTracking/${activeOrder.trackingToken}`), {
-      estado: 'entregado',
-      updatedAt: now
-    });
+    if (activeOrder.trackingToken) {
+      await update(ref(db, `publicTracking/${activeOrder.trackingToken}`), {
+        estado: 'entregado',
+        updatedAt: now
+      });
+    }
 
     await stopTracking();
     setActiveOrder(null, null);
@@ -338,7 +358,9 @@ deliverBtn.addEventListener('click', async () => {
   } catch (err) {
     setStatus(err.message);
   }
-});
+}
+
+deliverBtn.addEventListener('click', markDelivered);
 
 cancelBtn.addEventListener('click', async () => {
   if (!activeOrder) return setStatus('No hay pedido activo.');
@@ -436,6 +458,7 @@ onAuthStateChanged(auth, (user) => {
     appSection.classList.remove('hidden');
     setStatus('');
     ensureWallet(user.uid).catch((err) => setStatus(err.message));
+    refreshActionButtons();
 
     const q = query(ref(db, 'orders'), orderByChild('estado'), equalTo('buscando'));
     onValue(q, (ordersSnap) => renderPedidos(ordersSnap.val()));
