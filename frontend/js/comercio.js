@@ -305,6 +305,8 @@ qs('pedidoForm').addEventListener('submit', async (e) => {
   const estado = qs('estado').value;
   const notas = qs('notas').value.trim();
   const pagoMetodo = qs('pagoMetodo').value;
+  const shouldOpenPayment = pagoMetodo === 'comercio_paga_envio' || pagoMetodo === 'comercio_mp_transfer';
+  const paymentWindow = shouldOpenPayment ? window.open('', '_blank') : null;
 
   if (!origen || !destino || Number.isNaN(totalPedido) || totalPedido <= 0) {
     return setStatus('Completa origen, destino y total del pedido.');
@@ -370,11 +372,15 @@ qs('pedidoForm').addEventListener('submit', async (e) => {
       ubicacion: null
     });
 
-    if (pagoMetodo === 'comercio_paga_envio' || pagoMetodo === 'comercio_mp_transfer') {
+    if (shouldOpenPayment) {
       const initPoint = await createShippingPayment(orderId, pagoMetodo);
       await update(ref(db, `orders/${orderId}`), { mpInitPoint: initPoint, mpStatus: 'pending' });
       setStatus('Pedido creado. Abrir pago del envio.');
-      window.open(initPoint, '_blank');
+      if (paymentWindow) {
+        paymentWindow.location.href = initPoint;
+      } else {
+        window.location.href = initPoint;
+      }
     } else {
       setStatus('Pedido creado.');
     }
@@ -382,6 +388,9 @@ qs('pedidoForm').addEventListener('submit', async (e) => {
     e.target.reset();
     setCotizacion(null, null, null, null);
   } catch (err) {
+    if (paymentWindow && !paymentWindow.closed) {
+      paymentWindow.close();
+    }
     setStatus(err.message);
   }
 });
