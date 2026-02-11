@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Windi | Comercio</title>
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="stylesheet" href="/styles.css" />
+  <link href="https://api.mapbox.com/mapbox-gl-js/v3.5.0/mapbox-gl.css" rel="stylesheet" />
+  <link href="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-geocoder/v5.0.1/mapbox-gl-geocoder.css" rel="stylesheet" />
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">Windi</div>
+      <div class="muted">Panel Comercio</div>
+      <nav class="nav">
+        <a class="active" href="#nuevo">Nuevo pedido</a>
+        <a href="#activos">Pedidos activos</a>
+        <a href="#historial">Historial</a>
+        <a href="#mapa">Mapa</a>
+        <a href="/index.html">Inicio</a>
+      </nav>
+    </aside>
+
+    <main class="content">
+      <div class="header">
+        <div class="brand">Comercio</div>
+        <div class="row" style="max-width:420px;">
+          <button id="logoutBtn" class="secondary">Salir</button>
+        </div>
+      </div>
+
+      <div id="authSection" class="grid">
+        <div class="card">
+          <div class="title-row">
+            <span class="icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 7h18" />
+                <path d="M5 7l2 10h10l2-10" />
+                <path d="M9 7V5a3 3 0 0 1 6 0v2" />
+              </svg>
+            </span>
+            <h2>Ingresar</h2>
+          </div>
+          <input id="loginEmail" type="email" placeholder="Email" required />
+          <input id="loginPassword" type="password" placeholder="Contrasena" required />
+          <button id="loginBtn">Entrar</button>
+        </div>
+        <div class="card">
+          <div class="title-row">
+            <span class="icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 5v14" />
+                <path d="M5 12h14" />
+              </svg>
+            </span>
+            <h2>Crear cuenta</h2>
+          </div>
+          <input id="signupEmail" type="email" placeholder="Email" required />
+          <input id="signupPassword" type="password" placeholder="Contrasena" required />
+          <button id="signupBtn">Registrarme</button>
+        </div>
+      </div>
+
+      <div id="appSection" class="grid hidden">
+        <div class="card" id="nuevo">
+          <div class="title-row">
+            <span class="icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 5v14" />
+                <path d="M5 12h14" />
+              </svg>
+            </span>
+            <h2>Nuevo pedido</h2>
+          </div>
+          <form id="pedidoForm">
+            <div class="geocoder" id="geocoder-origen"></div>
+            <div class="geocoder" id="geocoder-destino"></div>
+            <input id="origen" placeholder="Origen" required />
+            <input id="destino" placeholder="Destino" required />
+            <input id="totalPedido" type="number" placeholder="Total del pedido (ej. 20000)" required />
+            <div class="muted" id="tarifaInfo">Base $1800 + $500 por km.</div>
+            <div class="muted" id="cotizacionTexto">Escribi las direcciones para ver la tarifa.</div>
+            <select id="pagoMetodo" required>
+              <option value="comercio_paga_envio">Cliente paga al comercio (comercio paga envio)</option>
+              <option value="cash_delivery">Cliente paga en efectivo al delivery</option>
+            </select>
+            <select id="estado" required>
+              <option value="buscando">Buscando</option>
+              <option value="en-camino">En camino</option>
+            </select>
+            <textarea id="notas" placeholder="Notas"></textarea>
+            <button type="submit">Crear pedido</button>
+          </form>
+        </div>
+        <div class="card" id="activos">
+          <div class="title-row">
+            <span class="icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="4" width="18" height="14" rx="2" />
+                <path d="M7 8h10" />
+                <path d="M7 12h6" />
+              </svg>
+            </span>
+            <h2>Pedidos activos</h2>
+          </div>
+          <div id="pedidosList" class="list"></div>
+        </div>
+        <div class="card" id="historial">
+          <div class="title-row">
+            <span class="icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 12h18" />
+                <path d="M7 12l-4-4" />
+                <path d="M7 12l-4 4" />
+              </svg>
+            </span>
+            <h2>Historial</h2>
+          </div>
+          <div id="historialList" class="list"></div>
+        </div>
+        <div class="card" id="mapa">
+          <div class="title-row">
+            <span class="icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 21s7-7 7-12a7 7 0 0 0-14 0c0 5 7 12 7 12z" />
+                <circle cx="12" cy="9" r="2" />
+              </svg>
+            </span>
+            <h2>Mapa en tiempo real</h2>
+          </div>
+          <div id="mapInfo" class="muted">Selecciona un pedido activo.</div>
+          <div id="map" class="map"></div>
+        </div>
+      </div>
+
+      <div id="status" class="footer"></div>
+    </main>
+  </div>
+
+  <script src="https://api.mapbox.com/mapbox-gl-js/v3.5.0/mapbox-gl.js"></script>
+  <script src="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-geocoder/v5.0.1/mapbox-gl-geocoder.min.js"></script>
+  <script src="/js/sw-register.js"></script>
+  <script type="module" src="/js/comercio.js"></script>
+</body>
+</html>

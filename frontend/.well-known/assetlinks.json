@@ -1,0 +1,10 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.windi.rg",
+      "sha256_cert_fingerprints": ["70:63:13:C4:E1:70:76:6E:1D:96:05:81:AA:E2:BF:EC:EE:80:E3:44:C6:94:EA:EB:8F:26:FB:AE:21:77:F1:DF"]
+    }
+  }
+]

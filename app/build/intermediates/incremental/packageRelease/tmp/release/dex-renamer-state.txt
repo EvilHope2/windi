@@ -1,0 +1,4 @@
+#Tue Feb 10 03:18:20 ART 2026
+base.0=C\:\\Users\\nahuy\\Desktop\\Empresa\\delirg\\app\\build\\intermediates\\dex\\release\\minifyReleaseWithR8\\classes.dex
+renamed.0=classes.dex
+path.0=classes.dex

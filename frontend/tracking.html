@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DelirG | Tracking</title>
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="stylesheet" href="/styles.css" />
+  <link href="https://api.mapbox.com/mapbox-gl-js/v3.5.0/mapbox-gl.css" rel="stylesheet" />
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="brand">Tracking</div>
+      <a href="/index.html">Inicio</a>
+    </div>
+
+    <div class="card">
+      <div class="title-row">
+        <span class="icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 21s7-7 7-12a7 7 0 0 0-14 0c0 5 7 12 7 12z" />
+            <circle cx="12" cy="9" r="2" />
+          </svg>
+        </span>
+        <h2>Seguimiento</h2>
+      </div>
+      <div id="trackingInfo" class="muted">Cargando...</div>
+      <div id="mapLink" class="muted"></div>
+      <div id="map" class="map"></div>
+    </div>
+
+    <div id="status" class="footer"></div>
+  </div>
+
+  <script src="https://api.mapbox.com/mapbox-gl-js/v3.5.0/mapbox-gl.js"></script>
+  <script src="/js/sw-register.js"></script>
+  <script type="module" src="/js/tracking.js"></script>
+</body>
+</html>

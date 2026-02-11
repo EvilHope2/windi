@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Windi | Inicio</title>
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="brand">Windi</div>
+      <span class="badge">Delivery Urbano Rio Grande</span>
+    </div>
+
+    <section class="hero">
+      <div>
+        <h1>Delivery local, rapido y trazable.</h1>
+        <p>Windi conecta comercios y repartidores con seguimiento en tiempo real y tarifas claras por distancia.</p>
+        <div class="row">
+          <a class="badge" href="/comercio.html">Soy comercio</a>
+          <a class="badge" href="/repartidor.html">Soy repartidor</a>
+        </div>
+      </div>
+      <div class="hero-card">
+        <div class="title-row">
+          <span class="icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 21s7-7 7-12a7 7 0 0 0-14 0c0 5 7 12 7 12z" />
+              <circle cx="12" cy="9" r="2" />
+            </svg>
+          </span>
+          <h2>Tracking publico</h2>
+        </div>
+        <p class="muted">Pegá el token para ver el envio en vivo.</p>
+        <form id="trackingForm">
+          <input id="trackingToken" placeholder="Token de tracking" required />
+          <button type="submit">Ver seguimiento</button>
+        </form>
+      </div>
+    </section>
+
+    <section class="grid" style="margin-top:20px;">
+      <div class="card">
+        <div class="title-row">
+          <span class="icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 7h18" />
+              <path d="M5 7l2 10h10l2-10" />
+              <path d="M9 7V5a3 3 0 0 1 6 0v2" />
+            </svg>
+          </span>
+          <h2>Comercios</h2>
+        </div>
+        <p class="muted">Crea pedidos, comparte tracking y gestiona el historial.</p>
+      </div>
+      <div class="card">
+        <div class="title-row">
+          <span class="icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 12h18" />
+              <path d="M3 12l4-4" />
+              <path d="M3 12l4 4" />
+              <circle cx="18" cy="12" r="3" />
+            </svg>
+          </span>
+          <h2>Repartidores</h2>
+        </div>
+        <p class="muted">Acepta pedidos, activa tracking y cobra por kilometro.</p>
+      </div>
+      <div class="card">
+        <div class="title-row">
+          <span class="icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="4" width="18" height="14" rx="2" />
+              <path d="M7 8h10" />
+              <path d="M7 12h6" />
+            </svg>
+          </span>
+          <h2>Tiempo real</h2>
+        </div>
+        <p class="muted">Mapa vivo, estados claros y costo transparente.</p>
+      </div>
+    </section>
+
+    <div class="footer">PWA lista para empaquetar como TWA (Android).</div>
+  </div>
+
+  <script src="/js/sw-register.js"></script>
+  <script>
+    document.getElementById('trackingForm').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const token = document.getElementById('trackingToken').value.trim();
+      if (!token) return;
+      window.location.href = `/tracking.html?t=${encodeURIComponent(token)}`;
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Windi | Repartidor</title>
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="stylesheet" href="/styles.css" />
+  <link href="https://api.mapbox.com/mapbox-gl-js/v3.5.0/mapbox-gl.css" rel="stylesheet" />
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="brand">Repartidor</div>
+      <div class="row" style="max-width:420px;">
+        <a href="/index.html">Inicio</a>
+        <button id="logoutBtn" class="secondary">Salir</button>
+      </div>
+    </div>
+
+    <div id="authSection" class="grid">
+      <div class="card">
+        <div class="title-row">
+          <span class="icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 7h18" />
+              <path d="M5 7l2 10h10l2-10" />
+              <path d="M9 7V5a3 3 0 0 1 6 0v2" />
+            </svg>
+          </span>
+          <h2>Ingresar</h2>
+        </div>
+        <input id="loginEmail" type="email" placeholder="Email" required />
+        <input id="loginPassword" type="password" placeholder="Contrasena" required />
+        <button id="loginBtn">Entrar</button>
+      </div>
+      <div class="card">
+        <div class="title-row">
+          <span class="icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 5v14" />
+              <path d="M5 12h14" />
+            </svg>
+          </span>
+          <h2>Crear cuenta</h2>
+        </div>
+        <input id="signupEmail" type="email" placeholder="Email" required />
+        <input id="signupPassword" type="password" placeholder="Contrasena" required />
+        <button id="signupBtn">Registrarme</button>
+      </div>
+    </div>
+
+    <div id="appSection" class="grid hidden">
+      <div class="card">
+        <div class="title-row">
+          <span class="icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 12h18" />
+              <path d="M7 12l-4-4" />
+              <path d="M7 12l-4 4" />
+            </svg>
+          </span>
+          <h2>Pedido activo</h2>
+        </div>
+        <div id="activoInfo" class="muted">No hay pedido activo.</div>
+        <button id="startTrackingBtn" class="secondary">Iniciar tracking</button>
+        <button id="stopTrackingBtn" class="danger">Detener tracking</button>
+        <button id="deliverBtn">Marcar entregado</button>
+        <button id="cancelBtn" class="danger">Cancelar pedido</button>
+      </div>
+      <div class="card">
+        <div class="title-row">
+          <span class="icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="4" width="18" height="14" rx="2" />
+              <path d="M7 8h10" />
+              <path d="M7 12h6" />
+            </svg>
+          </span>
+          <h2>Pedidos disponibles</h2>
+        </div>
+        <div id="pedidosList" class="list"></div>
+      </div>
+      <div class="card">
+        <div class="title-row">
+          <span class="icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 21s7-7 7-12a7 7 0 0 0-14 0c0 5 7 12 7 12z" />
+              <circle cx="12" cy="9" r="2" />
+            </svg>
+          </span>
+          <h2>Mi ubicacion</h2>
+        </div>
+        <div id="mapInfo" class="muted">Activa el tracking para ver el mapa.</div>
+        <div id="map" class="map"></div>
+      </div>
+      <div class="card">
+        <div class="title-row">
+          <span class="icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 1v22" />
+              <path d="M17 5H9a3 3 0 0 0 0 6h6a3 3 0 0 1 0 6H7" />
+            </svg>
+          </span>
+          <h2>Mi wallet</h2>
+        </div>
+        <div class="muted" id="walletBalance">Saldo: $ 0</div>
+        <div class="muted" id="walletPending">Pendiente: $ 0</div>
+        <div class="row">
+          <input id="withdrawAmount" type="number" placeholder="Monto a retirar" />
+          <button id="withdrawBtn" class="secondary">Retirar</button>
+        </div>
+        <div id="walletTx" class="list"></div>
+      </div>
+    </div>
+
+    <div id="status" class="footer"></div>
+  </div>
+
+  <script src="https://api.mapbox.com/mapbox-gl-js/v3.5.0/mapbox-gl.js"></script>
+  <script src="/js/sw-register.js"></script>
+  <script type="module" src="/js/repartidor.js"></script>
+</body>
+</html>
