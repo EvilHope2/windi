@@ -22,6 +22,7 @@ const authSection = qs('authSection');
 const appSection = qs('appSection');
 const statusEl = qs('status');
 const pedidosList = qs('pedidosList');
+const historialList = qs('historialList');
 const activoInfo = qs('activoInfo');
 const startTrackingBtn = qs('startTrackingBtn');
 const stopTrackingBtn = qs('stopTrackingBtn');
@@ -35,6 +36,12 @@ const walletPending = qs('walletPending');
 const withdrawAmount = qs('withdrawAmount');
 const withdrawBtn = qs('withdrawBtn');
 const walletTx = qs('walletTx');
+const perfilEstado = qs('perfilEstado');
+const signupNombreApellido = qs('signupNombreApellido');
+const signupDni = qs('signupDni');
+const signupVehiculoTipo = qs('signupVehiculoTipo');
+const signupPatente = qs('signupPatente');
+const signupWhatsapp = qs('signupWhatsapp');
 
 const MAPBOX_TOKEN = 'pk.eyJ1IjoiZGVsaXZlcnktcmcxIiwiYSI6ImNtbDZzdDg1ZDBlaTEzY29ta2k4OWVtZjIifQ.hzW7kFuwLzx2pHtCMDLPXQ';
 
@@ -45,6 +52,7 @@ let routeCoords = [];
 
 let activeOrder = null;
 let watchId = null;
+let profileApproved = false;
 const DEFAULT_CURRENCY = 'ARS';
 
 function buildDefaultWallet(now = Date.now()) {
@@ -85,12 +93,33 @@ function setStatus(msg) {
   statusEl.textContent = msg || '';
 }
 
+function updateProfileState(userData) {
+  if (userData?.restricted === true) {
+    profileApproved = false;
+    const reason = userData.restrictedReason ? ` Motivo: ${userData.restrictedReason}` : '';
+    perfilEstado.textContent = `Cuenta restringida por admin.${reason}`;
+    perfilEstado.classList.add('money-negative');
+    return;
+  }
+  const status = userData?.validationStatus || 'pending';
+  if (status === 'approved') {
+    profileApproved = true;
+    perfilEstado.textContent = 'Perfil aprobado. Ya puedes tomar pedidos.';
+    perfilEstado.classList.remove('money-negative');
+    return;
+  }
+  profileApproved = false;
+  perfilEstado.textContent = 'Perfil en validacion manual. Demora estimada: 24 horas habiles.';
+  perfilEstado.classList.add('money-negative');
+}
+
 function refreshActionButtons() {
-  const hasActive = !!activeOrder;
+  const hasActive = !!activeOrder && profileApproved;
   startTrackingBtn.disabled = !hasActive;
   stopTrackingBtn.disabled = watchId === null;
   deliverBtn.disabled = !hasActive;
   cancelBtn.disabled = !hasActive;
+  withdrawBtn.disabled = !profileApproved;
 }
 
 function ensureMap(loc) {
@@ -210,6 +239,7 @@ function renderWalletTx(data) {
 withdrawBtn.addEventListener('click', async () => {
   const user = auth.currentUser;
   if (!user) return;
+  if (!profileApproved) return setStatus('Tu perfil aun no esta aprobado.');
   const amount = Number(withdrawAmount.value);
   if (Number.isNaN(amount) || amount <= 0) {
     return setStatus('Monto invalido.');
@@ -253,17 +283,44 @@ qs('loginBtn').addEventListener('click', async () => {
   }
 });
 
+signupVehiculoTipo.addEventListener('change', () => {
+  const tipo = signupVehiculoTipo.value;
+  const requierePatente = tipo === 'auto' || tipo === 'moto';
+  signupPatente.classList.toggle('hidden', !requierePatente);
+  signupPatente.required = requierePatente;
+  if (!requierePatente) signupPatente.value = '';
+});
+
 qs('signupBtn').addEventListener('click', async () => {
+  const nombreApellido = signupNombreApellido.value.trim();
+  const dni = signupDni.value.trim();
+  const vehiculoTipo = signupVehiculoTipo.value;
+  const patente = signupPatente.value.trim().toUpperCase();
+  const whatsapp = signupWhatsapp.value.trim();
   const email = qs('signupEmail').value.trim();
   const password = qs('signupPassword').value.trim();
-  if (!email || !password) return setStatus('Completa email y contrasena.');
+  if (!nombreApellido || !dni || !vehiculoTipo || !whatsapp || !email || !password) {
+    return setStatus('Completa todos los datos del registro.');
+  }
+  if ((vehiculoTipo === 'auto' || vehiculoTipo === 'moto') && !patente) {
+    return setStatus('La patente es obligatoria para auto o moto.');
+  }
   try {
+    const now = Date.now();
     const cred = await createUserWithEmailAndPassword(auth, email, password);
     await set(ref(db, `users/${cred.user.uid}`), {
       email,
-      role: 'repartidor'
+      role: 'repartidor',
+      nombreApellido,
+      dni,
+      vehiculoTipo,
+      patente: vehiculoTipo === 'bici' ? null : patente,
+      whatsapp,
+      validationStatus: 'pending',
+      validationRequestedAt: now
     });
     await ensureWallet(cred.user.uid);
+    setStatus('Registro enviado. La validacion manual puede tardar hasta 24 horas habiles.');
   } catch (err) {
     setStatus(err.message);
   }
@@ -274,6 +331,7 @@ logoutBtn.addEventListener('click', async () => {
 });
 
 startTrackingBtn.addEventListener('click', () => {
+  if (!profileApproved) return setStatus('Tu perfil aun no esta aprobado.');
   if (!activeOrder) return setStatus('No hay pedido activo.');
   if (!navigator.geolocation) return setStatus('Geolocalizacion no disponible.');
 
@@ -305,6 +363,7 @@ stopTrackingBtn.addEventListener('click', () => {
 });
 
 async function markDelivered() {
+  if (!profileApproved) return setStatus('Tu perfil aun no esta aprobado.');
   if (!activeOrder) return setStatus('No hay pedido activo.');
   const now = Date.now();
   try {
@@ -365,6 +424,7 @@ async function markDelivered() {
 deliverBtn.addEventListener('click', markDelivered);
 
 cancelBtn.addEventListener('click', async () => {
+  if (!profileApproved) return setStatus('Tu perfil aun no esta aprobado.');
   if (!activeOrder) return setStatus('No hay pedido activo.');
   const now = Date.now();
   try {
@@ -413,7 +473,42 @@ function renderPedidos(data) {
   });
 }
 
+function renderHistorial(data) {
+  historialList.innerHTML = '';
+  if (!data) {
+    historialList.innerHTML = '<div class="item"><div class="muted">Todavia no tienes viajes finalizados.</div></div>';
+    return;
+  }
+  const closed = Object.entries(data)
+    .filter(([, p]) => p.estado === 'entregado' || p.estado === 'cancelado')
+    .sort((a, b) => (b[1].updatedAt || 0) - (a[1].updatedAt || 0));
+
+  if (closed.length === 0) {
+    historialList.innerHTML = '<div class="item"><div class="muted">Todavia no tienes viajes finalizados.</div></div>';
+    return;
+  }
+
+  closed.forEach(([id, p]) => {
+    const div = document.createElement('div');
+    div.className = 'item';
+    const payout = p.payout ?? p.precio ?? 0;
+    const closedAt = p.entregadoAt || p.canceledAt || p.updatedAt;
+    div.innerHTML = `
+      <div class="row">
+        <strong>${p.origen} -> ${p.destino}</strong>
+        <span class="status ${p.estado}">${p.estado}</span>
+      </div>
+      <div class="muted">Tarifa: ${fmtMoney(payout)} | Total pedido: ${fmtMoney(p.totalPedido || 0)}</div>
+      <div class="muted">Notas: ${p.notas || '-'}</div>
+      <div class="muted">Fecha: ${new Date(closedAt || Date.now()).toLocaleString('es-AR')}</div>
+      <div class="muted">ID: ${id}</div>
+    `;
+    historialList.appendChild(div);
+  });
+}
+
 async function aceptarPedido(id) {
+  if (!profileApproved) return setStatus('Tu perfil aun no esta aprobado.');
   const orderSnap = await get(ref(db, `orders/${id}`));
   const order = orderSnap.val();
   if (!order) return setStatus('Pedido no encontrado.');
@@ -447,7 +542,12 @@ onAuthStateChanged(auth, (user) => {
     const u = snap.val();
     if (!u) {
       setStatus('Creando perfil de repartidor...');
-      set(userRef, { email: user.email || '', role: 'repartidor' });
+      set(userRef, {
+        email: user.email || '',
+        role: 'repartidor',
+        validationStatus: 'pending',
+        validationRequestedAt: Date.now()
+      });
       return;
     }
     if (u.role !== 'repartidor') {
@@ -458,7 +558,8 @@ onAuthStateChanged(auth, (user) => {
 
     authSection.classList.add('hidden');
     appSection.classList.remove('hidden');
-    setStatus('');
+    updateProfileState(u);
+    setStatus(profileApproved ? '' : 'Tu perfil esta en revision manual (hasta 24 horas habiles).');
     ensureWallet(user.uid).catch((err) => setStatus(err.message));
     refreshActionButtons();
 
@@ -468,6 +569,7 @@ onAuthStateChanged(auth, (user) => {
     const activeQuery = query(ref(db, 'orders'), orderByChild('repartidorId'), equalTo(user.uid));
     onValue(activeQuery, (snapOrders) => {
       const data = snapOrders.val();
+      renderHistorial(data);
       if (!data) return setActiveOrder(null, null);
       const entry = Object.entries(data).find(([, p]) => p.estado === 'en-camino');
       if (!entry) return setActiveOrder(null, null);
