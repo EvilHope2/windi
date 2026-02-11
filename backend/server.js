@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import admin from 'firebase-admin';
-import mercadopago from 'mercadopago';
+import { MercadoPagoConfig, Preference } from 'mercadopago';
 
 const app = express();
 app.use(cors());
@@ -24,9 +24,7 @@ if (serviceAccount) {
   });
 }
 
-if (MP_ACCESS_TOKEN) {
-  mercadopago.configure({ access_token: MP_ACCESS_TOKEN });
-}
+const mpClient = MP_ACCESS_TOKEN ? new MercadoPagoConfig({ accessToken: MP_ACCESS_TOKEN }) : null;
 
 async function verifyFirebaseToken(req) {
   const authHeader = req.headers.authorization || '';
@@ -53,25 +51,31 @@ app.post('/create-shipping-payment', async (req, res) => {
       return res.status(400).json({ error: 'Metodo de pago invalido' });
     }
 
+    if (!mpClient) {
+      return res.status(500).json({ error: 'MercadoPago no configurado' });
+    }
+
     const amount = Number(order.precio || 0);
     if (!amount || amount <= 0) {
       return res.status(400).json({ error: 'Monto invalido' });
     }
 
-    const preference = {
-      items: [
-        {
-          title: `Envio Windi - ${order.origen} -> ${order.destino}`,
-          quantity: 1,
-          currency_id: 'ARS',
-          unit_price: amount
-        }
-      ],
-      metadata: { orderId }
-    };
+    const preference = new Preference(mpClient);
+    const result = await preference.create({
+      body: {
+        items: [
+          {
+            title: `Envio Windi - ${order.origen} -> ${order.destino}`,
+            quantity: 1,
+            currency_id: 'ARS',
+            unit_price: amount
+          }
+        ],
+        metadata: { orderId }
+      }
+    });
 
-    const result = await mercadopago.preferences.create(preference);
-    const initPoint = result?.body?.init_point;
+    const initPoint = result && result.init_point;
     if (!initPoint) return res.status(500).json({ error: 'No se pudo crear el pago' });
 
     await admin.database().ref(`orders/${orderId}`).update({

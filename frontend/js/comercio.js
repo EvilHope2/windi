@@ -33,7 +33,7 @@ const cotizacionTexto = qs('cotizacionTexto');
 
 const MAPBOX_TOKEN = 'pk.eyJ1IjoiZGVsaXZlcnktcmcxIiwiYSI6ImNtbDZzdDg1ZDBlaTEzY29ta2k4OWVtZjIifQ.hzW7kFuwLzx2pHtCMDLPXQ';
 const MP_PUBLIC_KEY = 'APP_USR-daa1c025-e503-40b6-80ef-e686706b16ee';
-const FUNCTIONS_BASE = 'https://windi-backend.onrender.com';
+const FUNCTIONS_BASE = 'https://windi-01ia.onrender.com';
 
 let map = null;
 let marker = null;
@@ -522,4 +522,5 @@ onAuthStateChanged(auth, (user) => {
     onValue(q, (ordersSnap) => renderPedidos(ordersSnap.val()));
   });
 });
+
 
