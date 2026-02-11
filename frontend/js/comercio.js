@@ -306,7 +306,10 @@ qs('pedidoForm').addEventListener('submit', async (e) => {
   const notas = qs('notas').value.trim();
   const pagoMetodo = qs('pagoMetodo').value;
   const shouldOpenPayment = pagoMetodo === 'comercio_paga_envio' || pagoMetodo === 'comercio_mp_transfer';
-  const paymentWindow = shouldOpenPayment ? window.open('', '_blank') : null;
+  const paymentWindow = shouldOpenPayment ? window.open('about:blank', '_blank') : null;
+  if (paymentWindow && !paymentWindow.closed) {
+    paymentWindow.document.body.innerHTML = '<p style="font-family:sans-serif;padding:16px;">Generando enlace de pago...</p>';
+  }
 
   if (!origen || !destino || Number.isNaN(totalPedido) || totalPedido <= 0) {
     return setStatus('Completa origen, destino y total del pedido.');
@@ -377,9 +380,10 @@ qs('pedidoForm').addEventListener('submit', async (e) => {
       await update(ref(db, `orders/${orderId}`), { mpInitPoint: initPoint, mpStatus: 'pending' });
       setStatus('Pedido creado. Abrir pago del envio.');
       if (paymentWindow) {
-        paymentWindow.location.href = initPoint;
+        paymentWindow.location.replace(initPoint);
       } else {
-        window.location.href = initPoint;
+        const opened = window.open(initPoint, '_blank');
+        if (!opened) window.location.href = initPoint;
       }
     } else {
       setStatus('Pedido creado.');
@@ -389,7 +393,7 @@ qs('pedidoForm').addEventListener('submit', async (e) => {
     setCotizacion(null, null, null, null);
   } catch (err) {
     if (paymentWindow && !paymentWindow.closed) {
-      paymentWindow.close();
+      paymentWindow.document.body.innerHTML = `<p style="font-family:sans-serif;padding:16px;">No se pudo abrir Mercado Pago.<br>${err.message || 'Error'}</p>`;
     }
     setStatus(err.message);
   }
