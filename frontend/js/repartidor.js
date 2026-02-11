@@ -181,6 +181,8 @@ function renderWallet(data) {
   const currency = data?.currency || DEFAULT_CURRENCY;
   walletBalance.textContent = `Saldo (${currency}): ${fmtMoney(balance)}`;
   walletPending.textContent = `Pendiente (${currency}): ${fmtMoney(pending)}`;
+  walletBalance.classList.toggle('money-negative', balance < 0);
+  walletPending.classList.toggle('money-negative', pending < 0);
 }
 
 function renderWalletTx(data) {

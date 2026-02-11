@@ -3,15 +3,15 @@
 :root {
   --bg: #0b1f1f;
   --bg-2: #0f2a2a;
-  --card: rgba(18, 38, 38, 0.92);
+  --card: rgba(16, 34, 34, 0.94);
   --muted: #9fb3b0;
   --text: #e7f3f1;
   --accent: #d68c45;
   --accent-2: #6fb1a8;
   --danger: #c4473a;
-  --border: #1d3a38;
-  --shadow: 0 18px 40px rgba(0,0,0,0.35);
-  --radius: 16px;
+  --border: #26504d;
+  --shadow: 0 14px 32px rgba(0,0,0,0.28);
+  --radius: 14px;
   --font: 'Space Grotesk', system-ui, -apple-system, Segoe UI, sans-serif;
   --font-display: 'Fraunces', serif;
 }
@@ -121,9 +121,9 @@ a:hover { text-decoration: underline; }
   background: var(--card);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 20px;
+  padding: 22px;
   box-shadow: var(--shadow);
-  backdrop-filter: blur(6px);
+  backdrop-filter: blur(4px);
 }
 
 .title-row {
@@ -153,54 +153,106 @@ a:hover { text-decoration: underline; }
 .card h2 {
   margin: 0;
   font-family: var(--font-display);
-  font-size: 20px;
+  font-size: 22px;
 }
 
 .muted { color: var(--muted); font-size: 14px; }
 
-input, select, textarea, button {
-  width: 100%;
-  padding: 12px 12px;
-  margin: 8px 0;
-  border-radius: 10px;
-  border: 1px solid var(--border);
-  background: #0a1b1b;
-  color: var(--text);
-  font-size: 14px;
+.money-negative {
+  color: var(--danger) !important;
+  font-weight: 700;
 }
 
-textarea { min-height: 90px; resize: vertical; }
+input, select, textarea, button {
+  width: 100%;
+  padding: 13px 14px;
+  margin: 0;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: rgba(7, 20, 20, 0.92);
+  color: var(--text);
+  font-size: 15px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.12s ease;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #7e9a96;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--accent-2);
+  box-shadow: 0 0 0 3px rgba(111, 177, 168, 0.2);
+}
+
+textarea { min-height: 92px; resize: vertical; }
+
+form {
+  display: grid;
+  gap: 10px;
+}
 
 button {
-  background: linear-gradient(90deg, var(--accent), #e5a35b);
+  min-height: 44px;
+  background: linear-gradient(90deg, var(--accent), #e3a060);
   border: none;
   cursor: pointer;
-  font-weight: 600;
+  font-weight: 700;
+  letter-spacing: 0.2px;
   color: #1f1208;
 }
 
+button:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.05);
+}
+
+button:active {
+  transform: translateY(0);
+}
+
+button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+}
+
 button.secondary {
-  background: transparent;
-  border: 1px solid var(--border);
+  background: rgba(8, 24, 24, 0.92);
+  border: 1px solid #386862;
   color: var(--text);
 }
 
 button.danger {
-  background: var(--danger);
+  background: linear-gradient(90deg, #be4639, #d65a4b);
   color: #fff5f2;
+}
+
+a.badge,
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  padding: 8px 14px;
+  border-radius: 999px;
 }
 
 .list {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 10px;
 }
 
 .item {
   border: 1px solid var(--border);
   border-radius: 12px;
-  padding: 12px;
-  background: #0a1b1b;
+  padding: 14px;
+  background: rgba(7, 20, 20, 0.9);
+  box-shadow: inset 0 0 0 1px rgba(43, 85, 80, 0.25);
 }
 
 .row {
@@ -211,6 +263,12 @@ button.danger {
 }
 
 .row > * { flex: 1; }
+
+.row button,
+.row .secondary,
+.row .danger {
+  min-width: 140px;
+}
 
 .status {
   padding: 4px 10px;
@@ -229,7 +287,7 @@ button.danger {
 .footer {
   margin-top: 20px;
   color: var(--muted);
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .map {
@@ -263,7 +321,7 @@ button.danger {
   background: rgba(10, 25, 25, 0.7);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 20px;
+  padding: 22px;
 }
 
 .geocoder {
@@ -272,19 +330,26 @@ button.danger {
 
 .geocoder .mapboxgl-ctrl-geocoder {
   min-width: 100%;
-  background: #0a1b1b;
+  background: rgba(7, 20, 20, 0.92);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: 12px;
   color: var(--text);
+  box-shadow: none;
 }
 
 .geocoder .mapboxgl-ctrl-geocoder--input {
   color: var(--text);
-  font-size: 14px;
+  font-size: 15px;
 }
 
 .geocoder .mapboxgl-ctrl-geocoder--icon-search {
   fill: var(--accent-2);
+}
+
+.geocoder .mapboxgl-ctrl-geocoder--button {
+  background: transparent;
+  margin: 0;
+  min-height: auto;
 }
 
 .mapboxgl-ctrl-geocoder--suggestion {
