@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Windi | Admin</title>
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">Windi</div>
+      <div class="muted">Panel Admin</div>
+      <nav class="nav">
+        <a class="active" href="#repartidores">Repartidores</a>
+        <a href="/aprobaciones.html">Aprobaciones</a>
+        <a href="#detalle">Detalle</a>
+        <a href="/index.html">Inicio</a>
+      </nav>
+    </aside>
+
+    <main class="content">
+      <div class="header">
+        <div class="brand">Administración</div>
+        <div class="row" style="max-width:420px;">
+          <button id="logoutBtn" class="secondary">Salir</button>
+        </div>
+      </div>
+
+      <div id="authSection" class="grid">
+        <div class="card">
+          <div class="title-row">
+            <span class="icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 7h18" />
+                <path d="M5 7l2 10h10l2-10" />
+                <path d="M9 7V5a3 3 0 0 1 6 0v2" />
+              </svg>
+            </span>
+            <h2>Ingreso Admin</h2>
+          </div>
+          <input id="loginEmail" type="email" placeholder="Email admin" required />
+          <input id="loginPassword" type="password" placeholder="Contrasena" required />
+          <button id="loginBtn">Entrar</button>
+          <div class="muted">Tu UID debe estar en `/admins/{uid}: true` en Firebase.</div>
+        </div>
+      </div>
+
+      <div id="appSection" class="grid hidden">
+        <div class="card" id="repartidores">
+          <div class="title-row">
+            <span class="icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="4" width="18" height="14" rx="2" />
+                <path d="M7 8h10" />
+                <path d="M7 12h6" />
+              </svg>
+            </span>
+            <h2>Repartidores</h2>
+          </div>
+          <input id="searchInput" type="text" placeholder="Buscar por nombre o DNI" />
+          <div id="resultsInfo" class="muted">Escribi nombre o DNI para filtrar.</div>
+          <div id="deliveryList" class="list"></div>
+        </div>
+
+        <div class="card" id="detalle">
+          <div class="title-row">
+            <span class="icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="9" />
+                <path d="M12 7v5l3 3" />
+              </svg>
+            </span>
+            <h2>Detalle de repartidor</h2>
+          </div>
+          <div id="deliveryDetail" class="muted">Selecciona un repartidor desde los resultados.</div>
+        </div>
+
+        <div class="card">
+          <div class="title-row">
+            <span class="icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 1v22" />
+                <path d="M17 5H9a3 3 0 0 0 0 6h6a3 3 0 0 1 0 6H7" />
+              </svg>
+            </span>
+            <h2>Wallet</h2>
+          </div>
+          <div id="walletDetail" class="muted">Sin seleccion.</div>
+          <div class="row">
+            <input id="walletAdjustAmount" type="number" placeholder="Ajuste (+/-)" />
+            <input id="walletAdjustReason" type="text" placeholder="Motivo del ajuste" />
+          </div>
+          <button id="walletAdjustBtn" class="secondary">Aplicar ajuste</button>
+        </div>
+
+        <div class="card">
+          <div class="title-row">
+            <span class="icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 12h18" />
+                <path d="M7 12l-4-4" />
+                <path d="M7 12l-4 4" />
+              </svg>
+            </span>
+            <h2>Viajes del repartidor</h2>
+          </div>
+          <div class="muted">Solo se muestran al buscar y seleccionar un repartidor.</div>
+          <div id="tripList" class="list"></div>
+        </div>
+      </div>
+
+      <div id="status" class="footer"></div>
+    </main>
+  </div>
+
+  <script src="/js/sw-register.js"></script>
+  <script type="module" src="/js/admin.js"></script>
+</body>
+</html>
