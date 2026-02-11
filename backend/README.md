@@ -11,6 +11,7 @@
 - `MP_ACCESS_TOKEN` = tu access token de MercadoPago
 - `FIREBASE_DB_URL` = https://windi-rg-121f8-default-rtdb.firebaseio.com/
 - `FIREBASE_SERVICE_ACCOUNT` = JSON del Service Account (como string en una sola linea)
+- `BACKEND_BASE_URL` = URL del servicio en Render (ej: https://windi-01ia.onrender.com)
 
 ## Generar Service Account
 Firebase Console ? Project Settings ? Service accounts ? Generate new private key.
@@ -18,4 +19,5 @@ Copialo completo y pegalo como string en `FIREBASE_SERVICE_ACCOUNT`.
 
 ## Endpoints
 - `POST /create-shipping-payment` (Authorization: Bearer <Firebase ID Token>)
+- `POST /mp/webhook` (MercadoPago webhook)
 - `GET /health`

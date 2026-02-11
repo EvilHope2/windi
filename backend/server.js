@@ -1,13 +1,18 @@
 import express from 'express';
 import cors from 'cors';
 import admin from 'firebase-admin';
-import { MercadoPagoConfig, Preference } from 'mercadopago';
+import { MercadoPagoConfig, Preference, Payment } from 'mercadopago';
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ type: '*/*' }));
 
-const { MP_ACCESS_TOKEN, FIREBASE_DB_URL, FIREBASE_SERVICE_ACCOUNT } = process.env;
+const {
+  MP_ACCESS_TOKEN,
+  FIREBASE_DB_URL,
+  FIREBASE_SERVICE_ACCOUNT,
+  BACKEND_BASE_URL
+} = process.env;
 
 if (!MP_ACCESS_TOKEN || !FIREBASE_DB_URL || !FIREBASE_SERVICE_ACCOUNT) {
   console.error('Missing env vars: MP_ACCESS_TOKEN, FIREBASE_DB_URL, FIREBASE_SERVICE_ACCOUNT');
@@ -25,6 +30,7 @@ if (serviceAccount) {
 }
 
 const mpClient = MP_ACCESS_TOKEN ? new MercadoPagoConfig({ accessToken: MP_ACCESS_TOKEN }) : null;
+const mpPayment = mpClient ? new Payment(mpClient) : null;
 
 async function verifyFirebaseToken(req) {
   const authHeader = req.headers.authorization || '';
@@ -71,7 +77,8 @@ app.post('/create-shipping-payment', async (req, res) => {
             unit_price: amount
           }
         ],
-        metadata: { orderId }
+        metadata: { orderId },
+        notification_url: BACKEND_BASE_URL ? `${BACKEND_BASE_URL}/mp/webhook` : undefined
       }
     });
 
@@ -88,6 +95,36 @@ app.post('/create-shipping-payment', async (req, res) => {
     const msg = err.message || 'Error creando pago';
     const code = msg === 'Unauthorized' ? 401 : 500;
     return res.status(code).json({ error: msg });
+  }
+});
+
+app.post('/mp/webhook', async (req, res) => {
+  try {
+    if (!mpPayment) return res.status(500).send('MP not configured');
+
+    const { type, data } = req.body || {};
+    const paymentId = data && (data.id || data['id']);
+
+    if (type !== 'payment' || !paymentId) {
+      return res.status(200).send('Ignored');
+    }
+
+    const payment = await mpPayment.get({ id: paymentId });
+    const status = payment?.status;
+    const orderId = payment?.metadata?.orderId;
+
+    if (orderId && status) {
+      await admin.database().ref(`orders/${orderId}`).update({
+        mpStatus: status,
+        mpPaymentId: paymentId,
+        mpPaidAt: status === 'approved' ? Date.now() : null
+      });
+    }
+
+    return res.status(200).send('OK');
+  } catch (err) {
+    console.error(err);
+    return res.status(500).send('Error');
   }
 });
 
