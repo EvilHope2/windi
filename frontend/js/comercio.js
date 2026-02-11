@@ -281,7 +281,9 @@ qs('loginBtn').addEventListener('click', async () => {
 qs('signupBtn').addEventListener('click', async () => {
   const email = qs('signupEmail').value.trim();
   const password = qs('signupPassword').value.trim();
+  const acceptedTerms = qs('signupTermsComercio').checked;
   if (!email || !password) return setStatus('Completa email y contrasena.');
+  if (!acceptedTerms) return setStatus('Debes aceptar los Terminos y Condiciones para registrarte.');
   try {
     const cred = await createUserWithEmailAndPassword(auth, email, password);
     await set(ref(db, `users/${cred.user.uid}`), {

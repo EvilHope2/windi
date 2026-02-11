@@ -42,6 +42,7 @@ const signupDni = qs('signupDni');
 const signupVehiculoTipo = qs('signupVehiculoTipo');
 const signupPatente = qs('signupPatente');
 const signupWhatsapp = qs('signupWhatsapp');
+const signupTermsRepartidor = qs('signupTermsRepartidor');
 
 const MAPBOX_TOKEN = 'pk.eyJ1IjoiZGVsaXZlcnktcmcxIiwiYSI6ImNtbDZzdDg1ZDBlaTEzY29ta2k4OWVtZjIifQ.hzW7kFuwLzx2pHtCMDLPXQ';
 
@@ -297,10 +298,14 @@ qs('signupBtn').addEventListener('click', async () => {
   const vehiculoTipo = signupVehiculoTipo.value;
   const patente = signupPatente.value.trim().toUpperCase();
   const whatsapp = signupWhatsapp.value.trim();
+  const acceptedTerms = signupTermsRepartidor.checked;
   const email = qs('signupEmail').value.trim();
   const password = qs('signupPassword').value.trim();
   if (!nombreApellido || !dni || !vehiculoTipo || !whatsapp || !email || !password) {
     return setStatus('Completa todos los datos del registro.');
+  }
+  if (!acceptedTerms) {
+    return setStatus('Debes aceptar los Terminos y Condiciones para registrarte.');
   }
   if ((vehiculoTipo === 'auto' || vehiculoTipo === 'moto') && !patente) {
     return setStatus('La patente es obligatoria para auto o moto.');

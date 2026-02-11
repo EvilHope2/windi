@@ -18,7 +18,7 @@
       </div>
     </div>
 
-    <div id="authSection" class="grid">
+      <div id="authSection" class="grid">
       <div class="card">
         <div class="title-row">
           <span class="icon">
@@ -44,13 +44,42 @@
           </span>
           <h2>Crear cuenta</h2>
         </div>
+        <div class="muted">Validacion manual de perfil: hasta 24 horas habiles.</div>
+        <input id="signupNombreApellido" type="text" placeholder="Nombre y Apellido" required />
+        <input id="signupDni" type="text" placeholder="DNI" required />
+        <select id="signupVehiculoTipo" required>
+          <option value="">Que conduce</option>
+          <option value="auto">Auto</option>
+          <option value="moto">Moto</option>
+          <option value="bici">Bici</option>
+        </select>
+        <input id="signupPatente" type="text" placeholder="Patente" class="hidden" />
+        <input id="signupWhatsapp" type="text" placeholder="Numero de WhatsApp" required />
         <input id="signupEmail" type="email" placeholder="Email" required />
         <input id="signupPassword" type="password" placeholder="Contrasena" required />
+        <div class="inline-check">
+          <input id="signupTermsRepartidor" type="checkbox" />
+          <label for="signupTermsRepartidor">
+            Acepto los <a href="/terminos.html" target="_blank">Terminos y Condiciones</a>. Al registrarme, acepto de forma expresa su contenido.
+          </label>
+        </div>
         <button id="signupBtn">Registrarme</button>
       </div>
     </div>
 
     <div id="appSection" class="grid hidden">
+      <div class="card">
+        <div class="title-row">
+          <span class="icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="9" />
+              <path d="M12 7v5l3 3" />
+            </svg>
+          </span>
+          <h2>Estado de perfil</h2>
+        </div>
+        <div id="perfilEstado" class="muted">Cargando estado de validacion...</div>
+      </div>
       <div class="card">
         <div class="title-row">
           <span class="icon">
@@ -111,6 +140,19 @@
           <button id="withdrawBtn" class="secondary">Retirar</button>
         </div>
         <div id="walletTx" class="list"></div>
+      </div>
+      <div class="card">
+        <div class="title-row">
+          <span class="icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 12h18" />
+              <path d="M7 12l-4-4" />
+              <path d="M7 12l-4 4" />
+            </svg>
+          </span>
+          <h2>Historial de viajes</h2>
+        </div>
+        <div id="historialList" class="list"></div>
       </div>
     </div>
 

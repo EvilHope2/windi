@@ -59,11 +59,44 @@
           </div>
           <input id="signupEmail" type="email" placeholder="Email" required />
           <input id="signupPassword" type="password" placeholder="Contrasena" required />
+          <div class="inline-check">
+            <input id="signupTermsComercio" type="checkbox" />
+            <label for="signupTermsComercio">
+              Acepto los <a href="/terminos.html" target="_blank">Terminos y Condiciones</a>. Al registrarme, declaro que los lei y acepto su cumplimiento.
+            </label>
+          </div>
           <button id="signupBtn">Registrarme</button>
         </div>
       </div>
 
       <div id="appSection" class="grid hidden">
+        <div class="card">
+          <div class="title-row">
+            <span class="icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 20h9" />
+                <path d="M12 4h9" />
+                <path d="M4 9h16" />
+                <path d="M4 15h16" />
+              </svg>
+            </span>
+            <h2>Primer uso en 3 pasos</h2>
+          </div>
+          <div class="list">
+            <div class="item">
+              <strong>1. Carga direcciones</strong>
+              <div class="muted">Escribe origen y destino en Rio Grande. Windi cotiza solo.</div>
+            </div>
+            <div class="item">
+              <strong>2. Elegi como se paga</strong>
+              <div class="muted">Selecciona Mercado Pago, transferencia MP o efectivo al delivery.</div>
+            </div>
+            <div class="item">
+              <strong>3. Crea y comparte tracking</strong>
+              <div class="muted">Se genera un link unico para que el cliente vea el recorrido.</div>
+            </div>
+          </div>
+        </div>
         <div class="card" id="nuevo">
           <div class="title-row">
             <span class="icon">

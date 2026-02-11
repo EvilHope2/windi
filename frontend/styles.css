@@ -175,6 +175,25 @@ input, select, textarea, button {
   transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.12s ease;
 }
 
+input[type="checkbox"] {
+  width: auto;
+  margin: 0;
+  transform: translateY(1px);
+}
+
+.inline-check {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.inline-check label {
+  font-size: 13px;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
 input::placeholder,
 textarea::placeholder {
   color: #7e9a96;
