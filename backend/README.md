@@ -18,6 +18,6 @@ Firebase Console ? Project Settings ? Service accounts ? Generate new private ke
 Copialo completo y pegalo como string en `FIREBASE_SERVICE_ACCOUNT`.
 
 ## Endpoints
-- `POST /create-shipping-payment` (Authorization: Bearer <Firebase ID Token>)
+- `POST /create-shipping-payment` (Authorization: Bearer <Firebase ID Token>, body: `orderId`, `pagoMetodo`)
 - `POST /mp/webhook` (MercadoPago webhook)
 - `GET /health`

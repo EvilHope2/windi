@@ -42,7 +42,7 @@ async function verifyFirebaseToken(req) {
 app.post('/create-shipping-payment', async (req, res) => {
   try {
     const decoded = await verifyFirebaseToken(req);
-    const { orderId } = req.body || {};
+    const { orderId, pagoMetodo } = req.body || {};
     if (!orderId) return res.status(400).json({ error: 'orderId requerido' });
 
     const orderSnap = await admin.database().ref(`orders/${orderId}`).get();
@@ -53,7 +53,10 @@ app.post('/create-shipping-payment', async (req, res) => {
       return res.status(403).json({ error: 'No autorizado' });
     }
 
-    if (order.pagoMetodo !== 'comercio_paga_envio') {
+    const paymentMethod = pagoMetodo || order.pagoMetodo;
+    const isCommercePayment =
+      paymentMethod === 'comercio_paga_envio' || paymentMethod === 'comercio_mp_transfer';
+    if (!isCommercePayment) {
       return res.status(400).json({ error: 'Metodo de pago invalido' });
     }
 
@@ -65,6 +68,20 @@ app.post('/create-shipping-payment', async (req, res) => {
     if (!amount || amount <= 0) {
       return res.status(400).json({ error: 'Monto invalido' });
     }
+
+    const paymentMethods =
+      paymentMethod === 'comercio_mp_transfer'
+        ? {
+            installments: 1,
+            excluded_payment_types: [
+              { id: 'credit_card' },
+              { id: 'debit_card' },
+              { id: 'prepaid_card' },
+              { id: 'ticket' },
+              { id: 'atm' }
+            ]
+          }
+        : undefined;
 
     const preference = new Preference(mpClient);
     const result = await preference.create({
@@ -78,6 +95,7 @@ app.post('/create-shipping-payment', async (req, res) => {
           }
         ],
         metadata: { orderId },
+        payment_methods: paymentMethods,
         notification_url: BACKEND_BASE_URL ? `${BACKEND_BASE_URL}/mp/webhook` : undefined
       }
     });

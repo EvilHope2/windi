@@ -32,7 +32,6 @@ const mapContainer = qs('map');
 const cotizacionTexto = qs('cotizacionTexto');
 
 const MAPBOX_TOKEN = 'pk.eyJ1IjoiZGVsaXZlcnktcmcxIiwiYSI6ImNtbDZzdDg1ZDBlaTEzY29ta2k4OWVtZjIifQ.hzW7kFuwLzx2pHtCMDLPXQ';
-const MP_PUBLIC_KEY = 'APP_USR-daa1c025-e503-40b6-80ef-e686706b16ee';
 const FUNCTIONS_BASE = 'https://windi-01ia.onrender.com';
 
 let map = null;
@@ -177,17 +176,17 @@ function initGeocoders() {
   qs('destino').classList.add('hidden');
 }
 
-async function createShippingPayment(orderId) {
+async function createShippingPayment(orderId, pagoMetodo) {
   const user = auth.currentUser;
   if (!user) return null;
   const token = await user.getIdToken();
-  const res = await fetch(`${FUNCTIONS_BASE}/createShippingPayment`, {
+  const res = await fetch(`${FUNCTIONS_BASE}/create-shipping-payment`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${token}`
     },
-    body: JSON.stringify({ orderId })
+    body: JSON.stringify({ orderId, pagoMetodo })
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
@@ -371,8 +370,8 @@ qs('pedidoForm').addEventListener('submit', async (e) => {
       ubicacion: null
     });
 
-    if (pagoMetodo === 'comercio_paga_envio') {
-      const initPoint = await createShippingPayment(orderId);
+    if (pagoMetodo === 'comercio_paga_envio' || pagoMetodo === 'comercio_mp_transfer') {
+      const initPoint = await createShippingPayment(orderId, pagoMetodo);
       await update(ref(db, `orders/${orderId}`), { mpInitPoint: initPoint, mpStatus: 'pending' });
       setStatus('Pedido creado. Abrir pago del envio.');
       window.open(initPoint, '_blank');
@@ -438,7 +437,11 @@ function renderPedidos(data) {
     div.className = 'item';
     const trackingUrl = `${location.origin}/tracking.html?t=${encodeURIComponent(p.trackingToken)}`;
     const closedTime = p.entregadoAt || p.canceledAt;
-    const pagoLabel = p.pagoMetodo === 'cash_delivery' ? 'Efectivo al delivery' : 'Comercio paga envio';
+    const pagoLabel = p.pagoMetodo === 'cash_delivery'
+      ? 'Efectivo al delivery'
+      : p.pagoMetodo === 'comercio_mp_transfer'
+        ? 'Comercio paga por transferencia MP'
+        : 'Comercio paga envio';
     const mpLink = p.mpInitPoint ? `<a href="${p.mpInitPoint}" target="_blank">Pagar envio</a>` : '';
 
     div.innerHTML = `
@@ -522,5 +525,3 @@ onAuthStateChanged(auth, (user) => {
     onValue(q, (ordersSnap) => renderPedidos(ordersSnap.val()));
   });
 });
-
-
