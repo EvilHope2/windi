@@ -11,7 +11,8 @@ const {
   MP_ACCESS_TOKEN,
   FIREBASE_DB_URL,
   FIREBASE_SERVICE_ACCOUNT,
-  BACKEND_BASE_URL
+  BACKEND_BASE_URL,
+  MP_CHECKOUT_MODE
 } = process.env;
 
 if (!MP_ACCESS_TOKEN || !FIREBASE_DB_URL || !FIREBASE_SERVICE_ACCOUNT) {
@@ -101,14 +102,27 @@ app.post('/create-shipping-payment', async (req, res) => {
     });
 
     const initPoint = result && result.init_point;
-    if (!initPoint) return res.status(500).json({ error: 'No se pudo crear el pago' });
+    const sandboxInitPoint = result && result.sandbox_init_point;
+    const forcedMode = (MP_CHECKOUT_MODE || 'auto').toLowerCase();
+    const inferredMode = String(MP_ACCESS_TOKEN || '').startsWith('TEST-') ? 'sandbox' : 'live';
+    const checkoutMode = forcedMode === 'live' || forcedMode === 'sandbox' ? forcedMode : inferredMode;
+    const checkoutUrl = checkoutMode === 'sandbox'
+      ? (sandboxInitPoint || initPoint)
+      : (initPoint || sandboxInitPoint);
+    if (!checkoutUrl) return res.status(500).json({ error: 'No se pudo crear el pago' });
 
     await admin.database().ref(`orders/${orderId}`).update({
-      mpInitPoint: initPoint,
+      mpInitPoint: initPoint || null,
+      mpSandboxInitPoint: sandboxInitPoint || null,
+      mpCheckoutUrl: checkoutUrl,
       mpStatus: 'pending'
     });
 
-    return res.json({ init_point: initPoint });
+    return res.json({
+      init_point: initPoint || null,
+      sandbox_init_point: sandboxInitPoint || null,
+      checkout_url: checkoutUrl
+    });
   } catch (err) {
     const msg = err.message || 'Error creando pago';
     const code = msg === 'Unauthorized' ? 401 : 500;
