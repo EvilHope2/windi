@@ -17,6 +17,7 @@ import {
   push
 } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-database.js';
 import { qs, fmtMoney } from './utils.js';
+import { getMapboxToken } from './mapbox-token.js';
 
 const authSection = qs('authSection');
 const appSection = qs('appSection');
@@ -28,6 +29,10 @@ const startTrackingBtn = qs('startTrackingBtn');
 const stopTrackingBtn = qs('stopTrackingBtn');
 const deliverBtn = qs('deliverBtn');
 const cancelBtn = qs('cancelBtn');
+const navPickupBtn = qs('navPickupBtn');
+const navDropoffBtn = qs('navDropoffBtn');
+const markPickedUpBtn = qs('markPickedUpBtn');
+const navEtaInfo = qs('navEtaInfo');
 const logoutBtn = qs('logoutBtn');
 const mapInfo = qs('mapInfo');
 const mapContainer = qs('map');
@@ -43,8 +48,15 @@ const signupVehiculoTipo = qs('signupVehiculoTipo');
 const signupPatente = qs('signupPatente');
 const signupWhatsapp = qs('signupWhatsapp');
 const signupTermsRepartidor = qs('signupTermsRepartidor');
+const gpsStateBadge = qs('gpsStateBadge');
+const gpsInfo = qs('gpsInfo');
+const gpsRetryBtn = qs('gpsRetryBtn');
+const deliveryDistanceInfo = qs('deliveryDistanceInfo');
 
-const MAPBOX_TOKEN = 'pk.eyJ1IjoiZGVsaXZlcnktcmcxIiwiYSI6ImNtbDZzdDg1ZDBlaTEzY29ta2k4OWVtZjIifQ.hzW7kFuwLzx2pHtCMDLPXQ';
+const BACKEND_BASE_URL = 'https://windi-01ia.onrender.com';
+const DELIVERY_RADIUS_METERS = 50;
+const DELIVERY_MAX_ACCURACY_METERS = 50;
+const TAKE_ORDER_MAX_ACCURACY_METERS = 100;
 
 let map = null;
 let marker = null;
@@ -55,6 +67,20 @@ let activeOrder = null;
 let watchId = null;
 let profileApproved = false;
 const DEFAULT_CURRENCY = 'ARS';
+let gpsStatus = 'searching';
+let currentPosition = null;
+let lastNavEtaFetchAt = 0;
+let ordersCache = null;
+
+function isPickupStage(order) {
+  const state = (order?.estado || '').toString().toLowerCase();
+  return state === 'en-camino-retiro' || state === 'accepted' || state === 'asignado';
+}
+
+function isDeliveryStage(order) {
+  const state = (order?.estado || '').toString().toLowerCase();
+  return state === 'en-camino';
+}
 
 function buildDefaultWallet(now = Date.now()) {
   return {
@@ -94,6 +120,180 @@ function setStatus(msg) {
   statusEl.textContent = msg || '';
 }
 
+function haversineMeters(a, b) {
+  const toRad = (v) => (Number(v) * Math.PI) / 180;
+  const lat1 = toRad(a.lat);
+  const lat2 = toRad(b.lat);
+  const dLat = lat2 - lat1;
+  const dLng = toRad(b.lng - a.lng);
+  const x = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+  const c = 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
+  return 6371000 * c;
+}
+
+function resolveDestinationGeo(order) {
+  if (!order) return null;
+  const raw =
+    order.destinoGeo ||
+    order.delivery?.customerLocation ||
+    order.delivery?.destination ||
+    null;
+  const lat = Number(raw?.lat);
+  const lng = Number(raw?.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  return { lat, lng };
+}
+
+function computeDistanceToDestination(order, position) {
+  const destination = resolveDestinationGeo(order);
+  if (!destination || !position) return null;
+  return haversineMeters(
+    { lat: Number(position.lat), lng: Number(position.lng) },
+    destination
+  );
+}
+
+function getPickupGeo(order) {
+  if (!order) return null;
+  const raw = order.origenGeo || order.delivery?.merchantLocation || null;
+  const lat = Number(raw?.lat);
+  const lng = Number(raw?.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  return { lat, lng };
+}
+
+function buildGoogleMapsNavUrl(destination, origin) {
+  if (!destination) return null;
+  const dest = `${destination.lat},${destination.lng}`;
+  const params = new URLSearchParams({
+    api: '1',
+    destination: dest,
+    travelmode: 'driving'
+  });
+  if (origin) params.set('origin', `${origin.lat},${origin.lng}`);
+  return `https://www.google.com/maps/dir/?${params.toString()}`;
+}
+
+function openNavigationTo(destination, label) {
+  if (!destination) {
+    setStatus(`No hay coordenadas para ${label}.`);
+    return;
+  }
+  const origin = currentPosition ? { lat: currentPosition.lat, lng: currentPosition.lng } : null;
+  const url = buildGoogleMapsNavUrl(destination, origin);
+  const opened = window.open(url, '_blank');
+  if (!opened) {
+    window.location.href = url;
+  }
+}
+
+async function refreshNavEtaInfo() {
+  if (!navEtaInfo) return;
+  if (!activeOrder) {
+    navEtaInfo.textContent = 'Sin ruta activa.';
+    return;
+  }
+  const target = isPickupStage(activeOrder) ? getPickupGeo(activeOrder) : resolveDestinationGeo(activeOrder);
+  if (!target) {
+    navEtaInfo.textContent = 'Sin coordenadas para calcular ruta.';
+    return;
+  }
+  if (!currentPosition) {
+    navEtaInfo.textContent = 'Activa GPS para calcular distancia y tiempo por calles.';
+    return;
+  }
+  try {
+    const token = await getMapboxToken();
+    if (!token) {
+      navEtaInfo.textContent = 'Mapbox no configurado para calcular ETA.';
+      return;
+    }
+    const now = Date.now();
+    if (now - lastNavEtaFetchAt < 10000) return;
+    lastNavEtaFetchAt = now;
+    const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${currentPosition.lng},${currentPosition.lat};${target.lng},${target.lat}?access_token=${token}&overview=false`;
+    const res = await fetch(url);
+    const data = await res.json();
+    const route = data?.routes?.[0];
+    if (!route) {
+      navEtaInfo.textContent = 'No se pudo calcular ETA por calles.';
+      return;
+    }
+    const km = (Number(route.distance || 0) / 1000).toFixed(1);
+    const min = Math.round(Number(route.duration || 0) / 60);
+    navEtaInfo.textContent = `Ruta por calles: ${km} km | ETA aprox: ${min} min`;
+  } catch {
+    navEtaInfo.textContent = 'No se pudo calcular ETA por calles.';
+  }
+}
+
+function updateGpsCard() {
+  if (!gpsStateBadge || !gpsInfo) return;
+  if (gpsStatus === 'active' && currentPosition) {
+    gpsStateBadge.className = 'status active';
+    gpsStateBadge.textContent = 'GPS activo';
+    const updated = new Date(currentPosition.timestamp || Date.now()).toLocaleTimeString('es-AR');
+    gpsInfo.textContent = `Precision: ${Math.round(currentPosition.accuracy || 0)} m | Ultima actualizacion: ${updated}`;
+    return;
+  }
+  if (gpsStatus === 'denied') {
+    gpsStateBadge.className = 'status cancelado';
+    gpsStateBadge.textContent = 'Permiso denegado';
+    gpsInfo.textContent = 'Habilita ubicacion para tomar pedidos y marcar entregas.';
+    return;
+  }
+  if (gpsStatus === 'error') {
+    gpsStateBadge.className = 'status pending';
+    gpsStateBadge.textContent = 'Sin señal GPS';
+    gpsInfo.textContent = 'No se pudo obtener ubicacion. Reintenta.';
+    return;
+  }
+  gpsStateBadge.className = 'status pending';
+  gpsStateBadge.textContent = 'Buscando señal';
+  gpsInfo.textContent = 'Esperando ubicacion en tiempo real...';
+}
+
+function canTakeOrders() {
+  return profileApproved && gpsStatus === 'active' && Number(currentPosition?.accuracy || 9999) <= TAKE_ORDER_MAX_ACCURACY_METERS;
+}
+
+function canDeliverActiveOrder() {
+  if (!activeOrder || !profileApproved) return { ok: false, reason: 'No hay pedido activo.' };
+  if (!isDeliveryStage(activeOrder)) return { ok: false, reason: 'Primero marca el pedido como retirado.' };
+  if (gpsStatus !== 'active' || !currentPosition) {
+    return { ok: false, reason: 'GPS no disponible. Activa ubicacion para continuar.' };
+  }
+  const accuracy = Number(currentPosition.accuracy || 9999);
+  if (accuracy > DELIVERY_MAX_ACCURACY_METERS) {
+    return { ok: false, reason: `Senal GPS debil (${Math.round(accuracy)} m). Acercate a cielo abierto.` };
+  }
+  const distanceMeters = computeDistanceToDestination(activeOrder, currentPosition);
+  if (distanceMeters == null) {
+    return { ok: false, reason: 'Pedido sin coordenadas de destino. No se puede validar entrega.' };
+  }
+  if (distanceMeters > DELIVERY_RADIUS_METERS) {
+    return { ok: false, reason: `Acercate al destino para confirmar la entrega (a ${Math.round(distanceMeters)} m).` };
+  }
+  return { ok: true, reason: `Dentro de rango (${Math.round(distanceMeters)} m).` };
+}
+
+function updateDeliveryDistanceUi() {
+  if (!deliveryDistanceInfo) return;
+  if (!activeOrder) {
+    deliveryDistanceInfo.textContent = 'Sin destino activo.';
+    return;
+  }
+  const distanceMeters = computeDistanceToDestination(activeOrder, currentPosition);
+  if (distanceMeters == null) {
+    deliveryDistanceInfo.textContent = 'Destino sin coordenadas validas. No se puede habilitar entrega.';
+    return;
+  }
+  const eligibility = canDeliverActiveOrder();
+  deliveryDistanceInfo.textContent = eligibility.ok
+    ? `Distancia al destino: ${Math.round(distanceMeters)} m. Puedes marcar entregado.`
+    : `Distancia al destino: ${Math.round(distanceMeters)} m. ${eligibility.reason}`;
+}
+
 function updateProfileState(userData) {
   if (userData?.restricted === true) {
     profileApproved = false;
@@ -116,20 +316,29 @@ function updateProfileState(userData) {
 
 function refreshActionButtons() {
   const hasActive = !!activeOrder && profileApproved;
-  startTrackingBtn.disabled = !hasActive;
+  startTrackingBtn.disabled = !profileApproved;
   stopTrackingBtn.disabled = watchId === null;
-  deliverBtn.disabled = !hasActive;
+  deliverBtn.disabled = !hasActive || !canDeliverActiveOrder().ok;
   cancelBtn.disabled = !hasActive;
   withdrawBtn.disabled = !profileApproved;
+  if (navPickupBtn) navPickupBtn.disabled = !hasActive || !isPickupStage(activeOrder);
+  if (markPickedUpBtn) markPickedUpBtn.disabled = !hasActive || !isPickupStage(activeOrder);
+  if (navDropoffBtn) navDropoffBtn.disabled = !hasActive || !isDeliveryStage(activeOrder);
+  updateGpsCard();
+  updateDeliveryDistanceUi();
+  refreshNavEtaInfo();
+  if (ordersCache) renderPedidos(ordersCache);
 }
 
-function ensureMap(loc) {
+async function ensureMap(loc) {
   if (!map || !window.mapboxgl) {
     if (!window.mapboxgl) return;
-    mapboxgl.accessToken = MAPBOX_TOKEN;
+    const token = await getMapboxToken();
+    if (!token) return;
+    mapboxgl.accessToken = token;
     map = new mapboxgl.Map({
       container: mapContainer,
-      style: 'mapbox://styles/mapbox/streets-v12',
+      style: 'mapbox://styles/mapbox/navigation-day-v1',
       center: [loc.lng, loc.lat],
       zoom: 15
     });
@@ -185,15 +394,22 @@ function setActiveOrder(order, id) {
   if (!order) {
     activeOrder = null;
     activoInfo.textContent = 'No hay pedido activo. Acepta uno desde "Pedidos disponibles".';
-    mapInfo.textContent = 'Acepta un pedido y toca "Iniciar tracking" para ver el mapa.';
+    mapInfo.textContent = 'Acepta un pedido y activa GPS para ver el mapa.';
+    if (navEtaInfo) navEtaInfo.textContent = 'Sin ruta activa.';
     refreshActionButtons();
     return;
   }
-  activeOrder = { id, trackingToken: order.trackingToken };
+  activeOrder = {
+    ...order,
+    id,
+    trackingToken: order.trackingToken,
+    destinoGeo: resolveDestinationGeo(order)
+  };
   const kmText = order.km != null ? `${order.km} km` : 'Km -';
   const payout = order.payout ?? order.precio;
   const pagoLabel = order.pagoMetodo === 'cash_delivery' ? 'Efectivo (cobras total)' : 'Comercio paga envio';
-  activoInfo.textContent = `${order.origen} -> ${order.destino} | ${kmText} | ${fmtMoney(payout)} | ${pagoLabel}`;
+  const etapa = isPickupStage(order) ? 'En camino a retirar' : (isDeliveryStage(order) ? 'En camino a entregar' : 'Pedido activo');
+  activoInfo.textContent = `${etapa} | ${order.origen} -> ${order.destino} | ${kmText} | ${fmtMoney(payout)} | ${pagoLabel}`;
   refreshActionButtons();
 }
 
@@ -202,7 +418,90 @@ async function stopTracking() {
     navigator.geolocation.clearWatch(watchId);
     watchId = null;
   }
+  if (gpsStatus !== 'denied') gpsStatus = 'searching';
+  currentPosition = null;
   refreshActionButtons();
+}
+
+async function onGpsPosition(pos) {
+  const { latitude, longitude, accuracy } = pos.coords;
+  const now = Date.now();
+  currentPosition = {
+    lat: latitude,
+    lng: longitude,
+    accuracy: Number(accuracy || 9999),
+    timestamp: pos.timestamp || now
+  };
+  gpsStatus = 'active';
+  refreshActionButtons();
+
+  if (!activeOrder) return;
+  const updates = {
+    ubicacion: { lat: latitude, lng: longitude, accuracy: Number(accuracy || 9999), updatedAt: now },
+    updatedAt: now
+  };
+  try {
+    const orderSnap = await get(ref(db, `orders/${activeOrder.id}`));
+    const order = orderSnap.val();
+    await update(ref(db, `orders/${activeOrder.id}`), updates);
+    if (order?.marketplaceOrderId) {
+      const nextStatus = isDeliveryStage(order) ? 'picked_up' : 'assigned';
+      await update(ref(db, `marketplaceOrders/${order.marketplaceOrderId}`), {
+        orderStatus: nextStatus,
+        updatedAt: now,
+        'delivery/courierId': auth.currentUser.uid,
+        'delivery/lastLocation': {
+          lat: latitude,
+          lng: longitude,
+          accuracy: Number(accuracy || 9999),
+          updatedAt: now
+        }
+      });
+      await set(push(ref(db, `marketplaceOrderStatusLog/${order.marketplaceOrderId}`)), {
+        status: nextStatus,
+        actorId: auth.currentUser.uid,
+        actorRole: 'courier',
+        createdAt: now
+      });
+    }
+    await update(ref(db, `publicTracking/${activeOrder.trackingToken}`), updates);
+    mapInfo.textContent = `Ubicacion actualizada ${new Date(now).toLocaleTimeString('es-AR')}`;
+    ensureMap({ lat: latitude, lng: longitude }).catch(() => {});
+    updateRoute({ lat: latitude, lng: longitude });
+  } catch (err) {
+    setStatus(err.message || 'No se pudo actualizar ubicacion.');
+  }
+}
+
+function onGpsError(err) {
+  if (err?.code === 1) {
+    gpsStatus = 'denied';
+    setStatus('Permiso de ubicacion denegado. Habilitalo para tomar pedidos y marcar entregas.');
+  } else if (err?.code === 2 || err?.code === 3) {
+    gpsStatus = 'error';
+    setStatus('No se pudo obtener ubicacion. Reintentando...');
+  } else {
+    gpsStatus = 'error';
+    setStatus(err?.message || 'Error de GPS.');
+  }
+  refreshActionButtons();
+}
+
+function startGpsWatch() {
+  if (!navigator.geolocation) {
+    gpsStatus = 'error';
+    setStatus('Geolocalizacion no disponible en este dispositivo.');
+    refreshActionButtons();
+    return;
+  }
+  if (watchId !== null) return;
+  gpsStatus = 'searching';
+  refreshActionButtons();
+  watchId = navigator.geolocation.watchPosition(
+    (pos) => { onGpsPosition(pos); },
+    (err) => { onGpsError(err); },
+    { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
+  );
 }
 
 function renderWallet(data) {
@@ -332,93 +631,141 @@ qs('signupBtn').addEventListener('click', async () => {
 });
 
 logoutBtn.addEventListener('click', async () => {
+  await stopTracking();
   await signOut(auth);
+});
+
+if (gpsRetryBtn) {
+  gpsRetryBtn.addEventListener('click', () => {
+    if (watchId !== null) {
+      navigator.geolocation.clearWatch(watchId);
+      watchId = null;
+    }
+    startGpsWatch();
+    setStatus('Reintentando GPS...');
+  });
+}
+
+window.addEventListener('beforeunload', () => {
+  if (watchId !== null) navigator.geolocation.clearWatch(watchId);
 });
 
 startTrackingBtn.addEventListener('click', () => {
   if (!profileApproved) return setStatus('Tu perfil aun no esta aprobado.');
-  if (!activeOrder) return setStatus('No hay pedido activo.');
-  if (!navigator.geolocation) return setStatus('Geolocalizacion no disponible.');
-
-  watchId = navigator.geolocation.watchPosition(
-    async (pos) => {
-      const { latitude, longitude } = pos.coords;
-      const now = Date.now();
-      const updates = {
-        ubicacion: { lat: latitude, lng: longitude, updatedAt: now },
-        updatedAt: now
-      };
-      await update(ref(db, `orders/${activeOrder.id}`), updates);
-      await update(ref(db, `publicTracking/${activeOrder.trackingToken}`), updates);
-      mapInfo.textContent = `Ubicacion actualizada ${new Date(now).toLocaleTimeString('es-AR')}`;
-      ensureMap({ lat: latitude, lng: longitude });
-      updateRoute({ lat: latitude, lng: longitude });
-    },
-    (err) => setStatus(err.message),
-    { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
-  );
-
-  setStatus('Tracking activo.');
+  startGpsWatch();
+  setStatus('GPS activado.');
   refreshActionButtons();
 });
 
 stopTrackingBtn.addEventListener('click', () => {
   stopTracking();
-  setStatus('Tracking detenido.');
+  setStatus('GPS detenido.');
 });
 
-async function markDelivered() {
+if (navPickupBtn) {
+  navPickupBtn.addEventListener('click', () => {
+    if (!activeOrder) return setStatus('No hay pedido activo.');
+    openNavigationTo(getPickupGeo(activeOrder), 'retiro');
+  });
+}
+
+if (navDropoffBtn) {
+  navDropoffBtn.addEventListener('click', () => {
+    if (!activeOrder) return setStatus('No hay pedido activo.');
+    openNavigationTo(resolveDestinationGeo(activeOrder), 'entrega');
+  });
+}
+
+async function markPickedUp() {
   if (!profileApproved) return setStatus('Tu perfil aun no esta aprobado.');
   if (!activeOrder) return setStatus('No hay pedido activo.');
+  if (!isPickupStage(activeOrder)) return setStatus('El pedido ya esta en etapa de entrega.');
+
   const now = Date.now();
   try {
     const orderRef = ref(db, `orders/${activeOrder.id}`);
     const snap = await get(orderRef);
     const order = snap.val();
     if (!order) return setStatus('Pedido no encontrado.');
-    if (order.repartidorId !== auth.currentUser.uid) {
-      return setStatus('Este pedido no esta asignado a tu cuenta.');
-    }
-    if (order.estado !== 'en-camino') {
-      return setStatus('Solo puedes entregar pedidos en estado en-camino.');
-    }
-
-    const walletRef = ref(db, `wallets/${auth.currentUser.uid}`);
-    const wSnap = await get(walletRef);
-    const wallet = wSnap.val() || buildDefaultWallet();
-
-    if (!order.payoutApplied) {
-      if (order.pagoMetodo === 'cash_delivery') {
-        const comision = order.comision ?? 0;
-        const newBalance = (wallet.balance || 0) - comision;
-        const totalCommissions = (wallet.totalCommissions || 0) + Math.abs(comision);
-        await update(walletRef, { balance: newBalance, totalCommissions, updatedAt: now });
-        const txRef = push(ref(db, `walletTx/${auth.currentUser.uid}`));
-        await set(txRef, { type: 'commission', amount: -comision, createdAt: now, orderId: activeOrder.id });
-      } else {
-        const payout = order.payout ?? order.precio ?? 0;
-        const newBalance = (wallet.balance || 0) + payout;
-        const totalEarned = (wallet.totalEarned || 0) + payout;
-        await update(walletRef, { balance: newBalance, totalEarned, updatedAt: now });
-        const txRef = push(ref(db, `walletTx/${auth.currentUser.uid}`));
-        await set(txRef, { type: 'credit', amount: payout, createdAt: now, orderId: activeOrder.id });
-      }
-    }
+    if (order.repartidorId !== auth.currentUser.uid) return setStatus('Este pedido no esta asignado a tu cuenta.');
 
     await update(orderRef, {
-      estado: 'entregado',
-      entregadoAt: now,
-      updatedAt: now,
-      payoutApplied: true
+      estado: 'en-camino',
+      pickedUpAt: now,
+      updatedAt: now
     });
-    if (activeOrder.trackingToken) {
-      await update(ref(db, `publicTracking/${activeOrder.trackingToken}`), {
-        estado: 'entregado',
+
+    if (order.marketplaceOrderId) {
+      await update(ref(db, `marketplaceOrders/${order.marketplaceOrderId}`), {
+        orderStatus: 'picked_up',
+        updatedAt: now,
+        'delivery/courierId': auth.currentUser.uid
+      });
+      await set(push(ref(db, `marketplaceOrderStatusLog/${order.marketplaceOrderId}`)), {
+        status: 'picked_up',
+        actorId: auth.currentUser.uid,
+        actorRole: 'courier',
+        createdAt: now
+      });
+    }
+
+    if (order.trackingToken) {
+      await update(ref(db, `publicTracking/${order.trackingToken}`), {
+        estado: 'en-camino',
         updatedAt: now
       });
     }
 
-    await stopTracking();
+    activeOrder = {
+      ...activeOrder,
+      ...order,
+      estado: 'en-camino',
+      pickedUpAt: now
+    };
+    refreshActionButtons();
+    openNavigationTo(resolveDestinationGeo(activeOrder), 'entrega');
+    setStatus('Pedido marcado como retirado. Navegando al destino.');
+  } catch (err) {
+    setStatus(err.message);
+  }
+}
+
+if (markPickedUpBtn) {
+  markPickedUpBtn.addEventListener('click', markPickedUp);
+}
+
+async function deliverWithServerValidation(orderId) {
+  const user = auth.currentUser;
+  if (!user) throw new Error('Debes iniciar sesion.');
+  if (!currentPosition) throw new Error('GPS no disponible.');
+  const token = await user.getIdToken();
+  const res = await fetch(`${BACKEND_BASE_URL}/courier/orders/${encodeURIComponent(orderId)}/deliver`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`
+    },
+    body: JSON.stringify({
+      lat: Number(currentPosition.lat),
+      lng: Number(currentPosition.lng),
+      accuracy: Number(currentPosition.accuracy || 9999),
+      timestamp: Number(currentPosition.timestamp || Date.now())
+    })
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(data?.error || 'No se pudo validar entrega.');
+  }
+  return data;
+}
+
+async function markDelivered() {
+  if (!profileApproved) return setStatus('Tu perfil aun no esta aprobado.');
+  if (!activeOrder) return setStatus('No hay pedido activo.');
+  const eligibility = canDeliverActiveOrder();
+  if (!eligibility.ok) return setStatus(eligibility.reason);
+  try {
+    await deliverWithServerValidation(activeOrder.id);
     setActiveOrder(null, null);
     setStatus('Pedido entregado.');
   } catch (err) {
@@ -438,6 +785,20 @@ cancelBtn.addEventListener('click', async () => {
       canceledAt: now,
       updatedAt: now
     });
+    const orderSnap = await get(ref(db, `orders/${activeOrder.id}`));
+    const order = orderSnap.val();
+    if (order?.marketplaceOrderId) {
+      await update(ref(db, `marketplaceOrders/${order.marketplaceOrderId}`), {
+        orderStatus: 'cancelled',
+        updatedAt: now
+      });
+      await set(push(ref(db, `marketplaceOrderStatusLog/${order.marketplaceOrderId}`)), {
+        status: 'cancelled',
+        actorId: auth.currentUser.uid,
+        actorRole: 'courier',
+        createdAt: now
+      });
+    }
     await update(ref(db, `publicTracking/${activeOrder.trackingToken}`), {
       estado: 'cancelado',
       updatedAt: now
@@ -457,12 +818,27 @@ function renderPedidos(data) {
     return;
   }
 
-  Object.entries(data).reverse().forEach(([id, p]) => {
+  const availableEntries = Object.entries(data)
+    .filter(([, p]) => {
+      const state = (p?.estado || '').toString().toLowerCase();
+      const isAvailableState = state === 'buscando' || state === 'esperando-comercio';
+      const isUnassigned = !p?.repartidorId;
+      return isAvailableState && isUnassigned;
+    })
+    .sort((a, b) => (b[1].createdAt || 0) - (a[1].createdAt || 0));
+
+  if (!availableEntries.length) {
+    pedidosList.innerHTML = '<div class="item"><div class="muted">No hay pedidos disponibles ahora. Actualiza en unos segundos.</div></div>';
+    return;
+  }
+
+  availableEntries.forEach(([id, p]) => {
     const div = document.createElement('div');
     div.className = 'item';
     const kmText = p.km != null ? `${p.km} km` : 'Km -';
     const payout = p.payout ?? p.precio;
     const pagoLabel = p.pagoMetodo === 'cash_delivery' ? `Efectivo (cobras ${fmtMoney(p.totalPedido)})` : 'Comercio paga envio';
+    const canTake = canTakeOrders();
     div.innerHTML = `
       <div class="row">
         <strong>${p.origen} -> ${p.destino}</strong>
@@ -471,7 +847,8 @@ function renderPedidos(data) {
       <div class="muted">${kmText} | Tarifa: ${fmtMoney(payout)}</div>
       <div class="muted">Pago: ${pagoLabel}</div>
       <div class="muted">Notas: ${p.notas || '-'}</div>
-      <button data-id="${id}">Aceptar</button>
+      ${canTake ? '' : '<div class="muted">Habilita GPS con buena precision para tomar pedidos.</div>'}
+      <button data-id="${id}" ${canTake ? '' : 'disabled'}>Aceptar</button>
     `;
     div.querySelector('button').addEventListener('click', () => aceptarPedido(id));
     pedidosList.appendChild(div);
@@ -514,30 +891,56 @@ function renderHistorial(data) {
 
 async function aceptarPedido(id) {
   if (!profileApproved) return setStatus('Tu perfil aun no esta aprobado.');
+  if (!canTakeOrders()) return setStatus('Activa GPS con precision suficiente para tomar pedidos.');
   const orderSnap = await get(ref(db, `orders/${id}`));
   const order = orderSnap.val();
   if (!order) return setStatus('Pedido no encontrado.');
+  const estado = (order.estado || '').toString().toLowerCase();
+  if (estado !== 'buscando' && estado !== 'esperando-comercio') {
+    return setStatus('Este pedido ya no esta disponible para aceptar.');
+  }
+  if (order.repartidorId) {
+    return setStatus('Este pedido ya fue asignado.');
+  }
 
   const now = Date.now();
   await update(ref(db, `orders/${id}`), {
-    estado: 'en-camino',
+    estado: 'en-camino-retiro',
     repartidorId: auth.currentUser.uid,
     acceptedAt: now,
     updatedAt: now
   });
+  if (order.marketplaceOrderId) {
+    await update(ref(db, `marketplaceOrders/${order.marketplaceOrderId}`), {
+      orderStatus: 'assigned',
+      'delivery/courierId': auth.currentUser.uid,
+      updatedAt: now
+    });
+    await set(push(ref(db, `marketplaceOrderStatusLog/${order.marketplaceOrderId}`)), {
+      status: 'assigned',
+      actorId: auth.currentUser.uid,
+      actorRole: 'courier',
+      createdAt: now
+    });
+  }
   await update(ref(db, `publicTracking/${order.trackingToken}`), {
-    estado: 'en-camino',
+    estado: 'en-camino-retiro',
     updatedAt: now
   });
 
-  setActiveOrder(order, id);
-  setStatus('Pedido aceptado.');
+  setActiveOrder({ ...order, estado: 'en-camino-retiro', repartidorId: auth.currentUser.uid }, id);
+  openNavigationTo(getPickupGeo({ ...order, estado: 'en-camino-retiro' }), 'retiro');
+  setStatus('Pedido aceptado. Navegando al punto de retiro.');
 }
 
 onAuthStateChanged(auth, (user) => {
   if (!user) {
+    stopTracking().catch(() => {});
     authSection.classList.remove('hidden');
     appSection.classList.add('hidden');
+    gpsStatus = 'searching';
+    currentPosition = null;
+    updateGpsCard();
     setStatus('');
     return;
   }
@@ -566,22 +969,26 @@ onAuthStateChanged(auth, (user) => {
     updateProfileState(u);
     setStatus(profileApproved ? '' : 'Tu perfil esta en revision manual (hasta 24 horas habiles).');
     ensureWallet(user.uid).catch((err) => setStatus(err.message));
+    startGpsWatch();
     refreshActionButtons();
 
-    const q = query(ref(db, 'orders'), orderByChild('estado'), equalTo('buscando'));
-    onValue(q, (ordersSnap) => renderPedidos(ordersSnap.val()));
+    onValue(ref(db, 'orders'), (ordersSnap) => {
+      ordersCache = ordersSnap.val() || null;
+      renderPedidos(ordersCache);
+    });
 
     const activeQuery = query(ref(db, 'orders'), orderByChild('repartidorId'), equalTo(user.uid));
     onValue(activeQuery, (snapOrders) => {
       const data = snapOrders.val();
       renderHistorial(data);
       if (!data) return setActiveOrder(null, null);
-      const entry = Object.entries(data).find(([, p]) => p.estado === 'en-camino');
+      const entry = Object.entries(data).find(([, p]) => p.estado === 'en-camino')
+        || Object.entries(data).find(([, p]) => p.estado === 'en-camino-retiro');
       if (!entry) return setActiveOrder(null, null);
       const [id, order] = entry;
       setActiveOrder(order, id);
       if (order.ubicacion) {
-        ensureMap(order.ubicacion);
+        ensureMap(order.ubicacion).catch(() => {});
         updateRoute(order.ubicacion);
       }
     });

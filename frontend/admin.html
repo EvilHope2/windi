@@ -14,6 +14,7 @@
       <div class="muted">Panel Admin</div>
       <nav class="nav">
         <a class="active" href="#repartidores">Repartidores</a>
+        <a href="#comerciosPendientes">Comercios pendientes</a>
         <a href="#detalle">Detalle</a>
         <a href="/index.html">Inicio</a>
       </nav>
@@ -74,6 +75,21 @@
             <h2>Detalle de repartidor</h2>
           </div>
           <div id="deliveryDetail" class="muted">Selecciona un repartidor desde los resultados.</div>
+        </div>
+
+        <div class="card" id="comerciosPendientes">
+          <div class="title-row">
+            <span class="icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M3 7h18" />
+                <path d="M5 7l2 10h10l2-10" />
+                <path d="M9 7V5a3 3 0 0 1 6 0v2" />
+              </svg>
+            </span>
+            <h2>Comercios pendientes</h2>
+          </div>
+          <div id="commercePendingInfo" class="muted">Cargando comercios pendientes...</div>
+          <div id="commercePendingList" class="list"></div>
         </div>
 
         <div class="card">

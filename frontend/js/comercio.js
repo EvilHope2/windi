@@ -13,9 +13,12 @@ import {
   orderByChild,
   equalTo,
   onValue,
-  update
+  update,
+  get
 } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-database.js';
 import { generateToken, qs, fmtMoney, fmtTime } from './utils.js';
+import { attachRioGrandeAutocomplete } from './address-autocomplete.js';
+import { getMapboxToken } from './mapbox-token.js';
 
 const TARIFA_BASE = 1800;
 const TARIFA_KM = 500;
@@ -23,15 +26,32 @@ const COMMISSION_RATE = 0.15;
 
 const authSection = qs('authSection');
 const appSection = qs('appSection');
+const pendingSection = qs('pendingSection');
+const pendingMessage = qs('pendingMessage');
 const statusEl = qs('status');
+const appShell = qs('appShell');
+const sidebar = qs('sidebar');
 const pedidosList = qs('pedidosList');
 const historialList = qs('historialList');
 const logoutBtn = qs('logoutBtn');
 const mapInfo = qs('mapInfo');
 const mapContainer = qs('map');
 const cotizacionTexto = qs('cotizacionTexto');
+const signupNombreApellido = qs('signupNombreApellido');
+const signupWhatsapp = qs('signupWhatsapp');
+const signupComercioNombre = qs('signupComercioNombre');
+const signupCategoria = qs('signupCategoria');
+const signupDireccion = qs('signupDireccion');
+const signupLat = qs('signupLat');
+const signupLng = qs('signupLng');
+const signupHorario = qs('signupHorario');
+const signupPrepTime = qs('signupPrepTime');
+const storeOpenBadge = qs('storeOpenBadge');
+const storeOpenModeText = qs('storeOpenModeText');
+const storeModeAutoBtn = qs('storeModeAutoBtn');
+const storeOpenNowBtn = qs('storeOpenNowBtn');
+const storeCloseNowBtn = qs('storeCloseNowBtn');
 
-const MAPBOX_TOKEN = 'pk.eyJ1IjoiZGVsaXZlcnktcmcxIiwiYSI6ImNtbDZzdDg1ZDBlaTEzY29ta2k4OWVtZjIifQ.hzW7kFuwLzx2pHtCMDLPXQ';
 const FUNCTIONS_BASE = 'https://windi-01ia.onrender.com';
 
 let map = null;
@@ -44,11 +64,145 @@ let lastKm = null;
 let lastPrecio = null;
 let lastCommission = null;
 let lastPayout = null;
+let geocodersInitialized = false;
+let signupAddressAc = null;
+let originAddressAc = null;
+let destinationAddressAc = null;
+let merchantProfile = null;
 
 const RIO_GRANDE_BBOX = [-68.0, -54.15, -67.25, -53.55];
+const RIO_GRANDE_CENTER = [-67.7095, -53.787];
+const RIO_GRANDE_RADIUS_KM = 45;
 
 function setStatus(msg) {
   statusEl.textContent = msg || '';
+}
+
+function pointInRioGrandeBBox(coords) {
+  if (!Array.isArray(coords) || coords.length < 2) return false;
+  const lng = Number(coords[0]);
+  const lat = Number(coords[1]);
+  if (!Number.isFinite(lng) || !Number.isFinite(lat)) return false;
+  return lng >= RIO_GRANDE_BBOX[0]
+    && lng <= RIO_GRANDE_BBOX[2]
+    && lat >= RIO_GRANDE_BBOX[1]
+    && lat <= RIO_GRANDE_BBOX[3];
+}
+
+function distanceKm(a, b) {
+  const toRad = (v) => (Number(v) * Math.PI) / 180;
+  const lat1 = toRad(a[1]);
+  const lat2 = toRad(b[1]);
+  const dLat = lat2 - lat1;
+  const dLng = toRad(b[0] - a[0]);
+  const c = 2 * Math.atan2(
+    Math.sqrt(Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2),
+    Math.sqrt(1 - (Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2))
+  );
+  return 6371 * c;
+}
+
+function isWithinRioGrandeZone(coords) {
+  if (pointInRioGrandeBBox(coords)) return true;
+  if (!Array.isArray(coords) || coords.length < 2) return false;
+  const d = distanceKm(coords, RIO_GRANDE_CENTER);
+  return Number.isFinite(d) && d <= RIO_GRANDE_RADIUS_KM;
+}
+
+function isComercioRole(role) {
+  const normalized = (role || '').toString().toLowerCase();
+  return normalized === 'comercio' || normalized === 'merchant';
+}
+
+function isActiveStatus(status) {
+  const normalized = (status || '').toString().toLowerCase();
+  return normalized === 'activo' || normalized === 'active';
+}
+
+function parseScheduleRange(scheduleText) {
+  if (!scheduleText) return null;
+  const text = String(scheduleText).toLowerCase();
+  const match = text.match(/(\d{1,2})[:.](\d{2})\s*(?:a|-|hasta)\s*(\d{1,2})[:.](\d{2})/i);
+  if (!match) return null;
+  const openH = Number(match[1]);
+  const openM = Number(match[2]);
+  const closeH = Number(match[3]);
+  const closeM = Number(match[4]);
+  if (![openH, openM, closeH, closeM].every(Number.isFinite)) return null;
+  if (openH < 0 || openH > 23 || closeH < 0 || closeH > 23 || openM < 0 || openM > 59 || closeM < 0 || closeM > 59) return null;
+  return {
+    openMin: openH * 60 + openM,
+    closeMin: closeH * 60 + closeM
+  };
+}
+
+function isOpenBySchedule(scheduleText) {
+  const range = parseScheduleRange(scheduleText);
+  if (!range) return true;
+  const now = new Date();
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+  if (range.closeMin >= range.openMin) {
+    return nowMin >= range.openMin && nowMin < range.closeMin;
+  }
+  return nowMin >= range.openMin || nowMin < range.closeMin;
+}
+
+function computeMerchantOpenState(merchant) {
+  const mode = (merchant?.openingMode || '').toLowerCase();
+  if (mode === 'manual') {
+    return {
+      isOpen: merchant?.manualOpen !== false,
+      mode: 'manual'
+    };
+  }
+  if (typeof merchant?.isOpen === 'boolean') {
+    return {
+      isOpen: merchant.isOpen,
+      mode: 'manual'
+    };
+  }
+  return {
+    isOpen: isOpenBySchedule(merchant?.schedule || merchant?.horario || ''),
+    mode: 'auto'
+  };
+}
+
+function renderStoreOpenControls() {
+  if (!storeOpenBadge || !storeOpenModeText || !merchantProfile) return;
+  const openState = computeMerchantOpenState(merchantProfile);
+  const schedule = merchantProfile.schedule || merchantProfile.horario || 'Sin horario configurado';
+
+  storeOpenBadge.className = `status ${openState.isOpen ? 'active' : 'cancelado'}`;
+  storeOpenBadge.textContent = openState.isOpen ? 'Abierto' : 'Cerrado';
+  storeOpenModeText.textContent = openState.mode === 'manual'
+    ? 'Modo manual activado por comercio.'
+    : `Modo automatico por horario: ${schedule}`;
+}
+
+async function setStoreOpeningMode(mode, manualOpen) {
+  const user = auth.currentUser;
+  if (!user) return;
+  const payload = {
+    openingMode: mode,
+    updatedAt: Date.now()
+  };
+  if (mode === 'manual') payload.manualOpen = manualOpen === true;
+  if (mode === 'auto') payload.manualOpen = null;
+  await update(ref(db, `merchants/${user.uid}`), payload);
+}
+
+function setAuthLayout(isAuthView) {
+  document.body.classList.toggle('auth-layout', isAuthView);
+  if (appShell) appShell.classList.toggle('auth-only', isAuthView);
+  if (sidebar) sidebar.classList.toggle('hidden', isAuthView);
+}
+
+function showPendingState(msg) {
+  authSection.classList.add('hidden');
+  appSection.classList.add('hidden');
+  pendingSection.classList.remove('hidden');
+  setAuthLayout(true);
+  pendingMessage.textContent = msg;
 }
 
 function calcularPrecio(km) {
@@ -68,17 +222,23 @@ function calcularPago(precio, comision) {
 }
 
 async function geocode(address) {
-  const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(address)}.json?access_token=${MAPBOX_TOKEN}&limit=1&bbox=${RIO_GRANDE_BBOX.join(',')}&country=AR`;
+  const token = await getMapboxToken();
+  if (!token) throw new Error('Mapbox no configurado.');
+  const query = `${address}, Rio Grande, Tierra del Fuego, Argentina`;
+  const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${token}&limit=5&bbox=${RIO_GRANDE_BBOX.join(',')}&country=AR&proximity=${RIO_GRANDE_CENTER[0]},${RIO_GRANDE_CENTER[1]}&types=address,poi`;
   const res = await fetch(url);
   if (!res.ok) throw new Error('No se pudo geocodificar la direccion.');
   const data = await res.json();
-  const feature = data.features && data.features[0];
-  if (!feature) throw new Error('Direccion no encontrada en Rio Grande.');
+  const features = Array.isArray(data.features) ? data.features : [];
+  const feature = features.find((f) => isWithinRioGrandeZone(f.center));
+  if (!feature) throw new Error('Direccion fuera de Rio Grande, Tierra del Fuego.');
   return feature.center; // [lng, lat]
 }
 
 async function routeDistanceKm(origin, destination) {
-  const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${origin[0]},${origin[1]};${destination[0]},${destination[1]}?access_token=${MAPBOX_TOKEN}&overview=false`;
+  const token = await getMapboxToken();
+  if (!token) throw new Error('Mapbox no configurado.');
+  const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${origin[0]},${origin[1]};${destination[0]},${destination[1]}?access_token=${token}&overview=false`;
   const res = await fetch(url);
   if (!res.ok) throw new Error('No se pudo calcular la ruta.');
   const data = await res.json();
@@ -100,17 +260,17 @@ function setCotizacion(km, precio, comision, payout) {
 }
 
 async function cotizar() {
-  const origen = qs('origen').value.trim();
-  const destino = qs('destino').value.trim();
-  if (!origen || !destino) {
+  const origenSel = originAddressAc ? originAddressAc.getSelected() : null;
+  const destinoSel = destinationAddressAc ? destinationAddressAc.getSelected() : null;
+  if (!origenSel || !destinoSel) {
     setCotizacion(null, null, null, null);
     return null;
   }
 
   try {
     setStatus('Calculando distancia...');
-    const originCoords = await geocode(origen);
-    const destCoords = await geocode(destino);
+    const originCoords = [Number(origenSel.lng), Number(origenSel.lat)];
+    const destCoords = [Number(destinoSel.lng), Number(destinoSel.lat)];
     const km = await routeDistanceKm(originCoords, destCoords);
     const kmRounded = Math.round(km * 10) / 10;
     const precio = calcularPrecio(kmRounded);
@@ -135,45 +295,7 @@ function scheduleCotizar() {
 }
 
 function initGeocoders() {
-  if (!window.MapboxGeocoder) return;
-  mapboxgl.accessToken = MAPBOX_TOKEN;
-
-  const baseOptions = {
-    accessToken: MAPBOX_TOKEN,
-    mapboxgl,
-    countries: 'AR',
-    bbox: RIO_GRANDE_BBOX,
-    placeholder: 'Direccion en Rio Grande',
-    marker: false,
-    types: 'address,poi'
-  };
-
-  const geocoderOrigen = new MapboxGeocoder({ ...baseOptions, placeholder: 'Origen en Rio Grande' });
-  const geocoderDestino = new MapboxGeocoder({ ...baseOptions, placeholder: 'Destino en Rio Grande' });
-
-  geocoderOrigen.addTo('#geocoder-origen');
-  geocoderDestino.addTo('#geocoder-destino');
-
-  geocoderOrigen.on('result', (e) => {
-    qs('origen').value = e.result.place_name;
-    scheduleCotizar();
-  });
-  geocoderDestino.on('result', (e) => {
-    qs('destino').value = e.result.place_name;
-    scheduleCotizar();
-  });
-
-  geocoderOrigen.on('clear', () => {
-    qs('origen').value = '';
-    setCotizacion(null, null, null, null);
-  });
-  geocoderDestino.on('clear', () => {
-    qs('destino').value = '';
-    setCotizacion(null, null, null, null);
-  });
-
-  qs('origen').classList.add('hidden');
-  qs('destino').classList.add('hidden');
+  geocodersInitialized = true;
 }
 
 async function createShippingPayment(orderId, pagoMetodo) {
@@ -193,16 +315,18 @@ async function createShippingPayment(orderId, pagoMetodo) {
     throw new Error(err.error || 'No se pudo crear el pago');
   }
   const data = await res.json();
-  return data.init_point;
+  return data.checkout_url || data.sandbox_init_point || data.init_point;
 }
 
-function ensureMap(loc) {
+async function ensureMap(loc) {
   if (!map || !window.mapboxgl) {
     if (!window.mapboxgl) return;
-    mapboxgl.accessToken = MAPBOX_TOKEN;
+    const token = await getMapboxToken();
+    if (!token) return;
+    mapboxgl.accessToken = token;
     map = new mapboxgl.Map({
       container: mapContainer,
-      style: 'mapbox://styles/mapbox/streets-v12',
+      style: 'mapbox://styles/mapbox/navigation-day-v1',
       center: [loc.lng, loc.lat],
       zoom: 14
     });
@@ -279,17 +403,69 @@ qs('loginBtn').addEventListener('click', async () => {
 });
 
 qs('signupBtn').addEventListener('click', async () => {
+  const nombreApellido = signupNombreApellido.value.trim();
   const email = qs('signupEmail').value.trim();
+  const whatsapp = signupWhatsapp.value.trim();
   const password = qs('signupPassword').value.trim();
+  const comercioNombre = signupComercioNombre.value.trim();
+  const categoria = signupCategoria.value;
+  const direccion = signupDireccion.value.trim();
+  let lat = Number(signupLat.value);
+  let lng = Number(signupLng.value);
+  const horario = signupHorario.value.trim();
+  const prepTimeMin = Number(signupPrepTime.value || 0);
   const acceptedTerms = qs('signupTermsComercio').checked;
-  if (!email || !password) return setStatus('Completa email y contrasena.');
+  if (!nombreApellido || !email || !whatsapp || !password || !comercioNombre || !categoria || !direccion) {
+    return setStatus('Completa todos los datos obligatorios del registro.');
+  }
+  if (password.length < 6) return setStatus('La contrasena debe tener al menos 6 caracteres.');
+  const selectedAddress = signupAddressAc ? signupAddressAc.getSelected() : null;
+  if (!signupAddressAc || !signupAddressAc.isSelectionValid() || !selectedAddress) {
+    return setStatus('Selecciona una direccion del comercio desde la lista para continuar.');
+  }
+  lng = Number(selectedAddress.lng);
+  lat = Number(selectedAddress.lat);
+  signupLng.value = String(lng);
+  signupLat.value = String(lat);
+  if (!isWithinRioGrandeZone([lng, lat])) {
+    const textHasRioGrande = direccion.toLowerCase().includes('rio grande');
+    if (!textHasRioGrande) {
+      return setStatus('La direccion del comercio debe estar dentro de Rio Grande, Tierra del Fuego.');
+    }
+  }
   if (!acceptedTerms) return setStatus('Debes aceptar los Terminos y Condiciones para registrarte.');
   try {
     const cred = await createUserWithEmailAndPassword(auth, email, password);
+    const now = Date.now();
     await set(ref(db, `users/${cred.user.uid}`), {
       email,
-      role: 'comercio'
+      role: 'comercio',
+      status: 'pendiente',
+      nombreApellido,
+      whatsapp,
+      comercioNombre,
+      categoria,
+      direccion,
+      geo: { lat, lng },
+      horario: horario || null,
+      prepTimeMin: prepTimeMin > 0 ? prepTimeMin : null,
+      createdAt: now
     });
+    await set(ref(db, `merchants/${cred.user.uid}`), {
+      name: comercioNombre,
+      category: categoria,
+      address: direccion,
+      geo: { lat, lng },
+      whatsapp,
+      schedule: horario || null,
+      prepTimeMin: prepTimeMin > 0 ? prepTimeMin : null,
+      status: 'pendiente',
+      isVerified: false,
+      ownerName: nombreApellido,
+      ownerEmail: email,
+      createdAt: now
+    });
+    showPendingState('Tu comercio esta pendiente de verificacion. Te avisaremos cuando sea aprobado.');
   } catch (err) {
     setStatus(err.message);
   }
@@ -299,10 +475,45 @@ logoutBtn.addEventListener('click', async () => {
   await signOut(auth);
 });
 
+if (storeModeAutoBtn) {
+  storeModeAutoBtn.addEventListener('click', async () => {
+    try {
+      await setStoreOpeningMode('auto');
+      setStatus('Modo automatico activado.');
+    } catch (err) {
+      setStatus(err.message);
+    }
+  });
+}
+
+if (storeOpenNowBtn) {
+  storeOpenNowBtn.addEventListener('click', async () => {
+    try {
+      await setStoreOpeningMode('manual', true);
+      setStatus('Local marcado como abierto.');
+    } catch (err) {
+      setStatus(err.message);
+    }
+  });
+}
+
+if (storeCloseNowBtn) {
+  storeCloseNowBtn.addEventListener('click', async () => {
+    try {
+      await setStoreOpeningMode('manual', false);
+      setStatus('Local marcado como cerrado.');
+    } catch (err) {
+      setStatus(err.message);
+    }
+  });
+}
+
 qs('pedidoForm').addEventListener('submit', async (e) => {
   e.preventDefault();
-  const origen = qs('origen').value.trim();
-  const destino = qs('destino').value.trim();
+  const origenSel = originAddressAc ? originAddressAc.getSelected() : null;
+  const destinoSel = destinationAddressAc ? destinationAddressAc.getSelected() : null;
+  const origen = origenSel ? (origenSel.address || '').trim() : '';
+  const destino = destinoSel ? (destinoSel.address || '').trim() : '';
   const totalPedido = Number(qs('totalPedido').value);
   const estado = qs('estado').value;
   const notas = qs('notas').value.trim();
@@ -313,8 +524,14 @@ qs('pedidoForm').addEventListener('submit', async (e) => {
     paymentWindow.document.body.innerHTML = '<p style="font-family:sans-serif;padding:16px;">Generando enlace de pago...</p>';
   }
 
-  if (!origen || !destino || Number.isNaN(totalPedido) || totalPedido <= 0) {
-    return setStatus('Completa origen, destino y total del pedido.');
+  if (!origenSel || !destinoSel || !origen || !destino || Number.isNaN(totalPedido) || totalPedido <= 0) {
+    return setStatus('Selecciona origen y destino de la lista, y completa el total del pedido.');
+  }
+
+  const profileSnap = await get(ref(db, `users/${auth.currentUser.uid}`));
+  const profile = profileSnap.val() || {};
+  if (!isComercioRole(profile.role) || !isActiveStatus(profile.status)) {
+    return setStatus('Tu comercio no esta activo para operar.');
   }
 
   let km = lastKm;
@@ -343,6 +560,8 @@ qs('pedidoForm').addEventListener('submit', async (e) => {
   const orderData = {
     origen,
     destino,
+    origenGeo: { lng: Number(origenSel.lng), lat: Number(origenSel.lat) },
+    destinoGeo: { lng: Number(destinoSel.lng), lat: Number(destinoSel.lat) },
     km,
     precio,
     comision,
@@ -378,14 +597,14 @@ qs('pedidoForm').addEventListener('submit', async (e) => {
     });
 
     if (shouldOpenPayment) {
-      const initPoint = await createShippingPayment(orderId, pagoMetodo);
-      await update(ref(db, `orders/${orderId}`), { mpInitPoint: initPoint, mpStatus: 'pending' });
+      const checkoutUrl = await createShippingPayment(orderId, pagoMetodo);
+      await update(ref(db, `orders/${orderId}`), { mpInitPoint: checkoutUrl, mpStatus: 'pending' });
       setStatus('Pedido creado. Abrir pago del envio.');
       if (paymentWindow) {
-        paymentWindow.location.replace(initPoint);
+        paymentWindow.location.replace(checkoutUrl);
       } else {
-        const opened = window.open(initPoint, '_blank');
-        if (!opened) window.location.href = initPoint;
+        const opened = window.open(checkoutUrl, '_blank');
+        if (!opened) window.location.href = checkoutUrl;
       }
     } else {
       setStatus('Pedido creado.');
@@ -427,7 +646,7 @@ function selectOrderForMap(order) {
     return;
   }
   mapInfo.textContent = `${order.origen} -> ${order.destino}`;
-  ensureMap(order.ubicacion);
+  ensureMap(order.ubicacion).catch(() => {});
   updateRoute(order.ubicacion);
 }
 
@@ -486,7 +705,7 @@ function renderPedidos(data) {
 
     if (selectedOrderId && selectedOrderId === id) {
       if (p.ubicacion) {
-        ensureMap(p.ubicacion);
+        ensureMap(p.ubicacion).catch(() => {});
         updateRoute(p.ubicacion);
       }
     }
@@ -510,8 +729,10 @@ function renderPedidos(data) {
 
 onAuthStateChanged(auth, (user) => {
   if (!user) {
+    setAuthLayout(true);
     authSection.classList.remove('hidden');
     appSection.classList.add('hidden');
+    pendingSection.classList.add('hidden');
     setStatus('');
     return;
   }
@@ -521,22 +742,73 @@ onAuthStateChanged(auth, (user) => {
     const u = snap.val();
     if (!u) {
       setStatus('Creando perfil de comercio...');
-      set(userRef, { email: user.email || '', role: 'comercio' });
+      set(userRef, { email: user.email || '', role: 'comercio', status: 'pendiente', createdAt: Date.now() });
       return;
     }
-    if (u.role !== 'comercio') {
+    if (!isComercioRole(u.role)) {
       setStatus('Tu usuario no tiene rol de comercio.');
       signOut(auth);
       return;
     }
 
+    if (!isActiveStatus(u.status)) {
+      const userStatus = (u.status || '').toString().toLowerCase();
+      const msg = userStatus === 'rechazado' || userStatus === 'rejected'
+        ? `Tu comercio fue rechazado.${u.rejectionReason ? ` Motivo: ${u.rejectionReason}` : ''}`
+        : 'Tu comercio esta pendiente de verificacion manual. Te avisaremos cuando sea aprobado.';
+      showPendingState(msg);
+      return;
+    }
+
     authSection.classList.add('hidden');
+    pendingSection.classList.add('hidden');
     appSection.classList.remove('hidden');
+    setAuthLayout(false);
     setStatus('');
 
     initGeocoders();
 
+    onValue(ref(db, `merchants/${user.uid}`), (merchantSnap) => {
+      merchantProfile = merchantSnap.val() || {};
+      renderStoreOpenControls();
+    });
+
     const q = query(ref(db, 'orders'), orderByChild('comercioId'), equalTo(user.uid));
     onValue(q, (ordersSnap) => renderPedidos(ordersSnap.val()));
+  }, (err) => {
+    setStatus(`Error al cargar perfil de comercio: ${err.message}`);
   });
+});
+
+// Signup requires selecting address/geo even before login.
+initGeocoders();
+signupAddressAc = attachRioGrandeAutocomplete(signupDireccion, {
+  onSelect: (selected) => {
+    signupLng.value = String(selected.lng ?? '');
+    signupLat.value = String(selected.lat ?? '');
+    setStatus('');
+  },
+  onInvalidate: () => {
+    signupLng.value = '';
+    signupLat.value = '';
+    setStatus('Selecciona una direccion del comercio desde la lista.');
+  }
+});
+originAddressAc = attachRioGrandeAutocomplete(qs('origen'), {
+  onSelect: () => {
+    setStatus('');
+    scheduleCotizar();
+  },
+  onInvalidate: () => {
+    setCotizacion(null, null, null, null);
+  }
+});
+destinationAddressAc = attachRioGrandeAutocomplete(qs('destino'), {
+  onSelect: () => {
+    setStatus('');
+    scheduleCotizar();
+  },
+  onInvalidate: () => {
+    setCotizacion(null, null, null, null);
+  }
 });

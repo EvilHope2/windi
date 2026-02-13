@@ -1,0 +1,40 @@
+﻿<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Windi | Acceso Cliente</title>
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="brand">Windi Clientes</div>
+      <div class="row" style="max-width:520px;">
+        <a class="badge" href="/index.html">Inicio</a>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:16px;">
+      <div class="title-row"><span class="icon">A</span><h2>Ingresar</h2></div>
+      <input id="loginEmail" type="email" placeholder="Email" />
+      <input id="loginPassword" type="password" placeholder="Contrasena" />
+      <button id="loginBtn">Entrar</button>
+    </div>
+
+    <div class="card" style="margin-top:16px;">
+      <div class="title-row"><span class="icon">R</span><h2>Crear cuenta</h2></div>
+      <input id="signupEmail" type="email" placeholder="Email" />
+      <input id="signupPassword" type="password" placeholder="Contrasena" />
+      <button id="signupBtn" class="secondary">Crear cuenta cliente</button>
+      <div class="muted" style="margin-top:8px;">Si ya tenes cuenta, usa Ingresar.</div>
+    </div>
+
+    <div id="status" class="footer"></div>
+  </div>
+
+  <script src="/js/sw-register.js"></script>
+  <script type="module" src="/js/marketplace-auth.js"></script>
+</body>
+</html>

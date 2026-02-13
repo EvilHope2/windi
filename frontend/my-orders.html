@@ -1,0 +1,27 @@
+﻿<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Windi | Mis pedidos</title>
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="brand">Mis pedidos</div>
+      <div class="row" style="max-width:420px;">
+        <a class="badge" href="/marketplace">Marketplace</a>
+      </div>
+    </div>
+    <div class="card" style="margin-top:16px;">
+      <div id="authInfo" class="muted"></div>
+      <div id="ordersList" class="list" style="margin-top:10px;"></div>
+    </div>
+    <div id="status" class="footer"></div>
+  </div>
+  <script src="/js/sw-register.js"></script>
+  <script type="module" src="/js/my-orders.js"></script>
+</body>
+</html>

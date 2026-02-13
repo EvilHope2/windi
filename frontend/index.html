@@ -3,224 +3,631 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Windi | Inicio</title>
+  <title>Windi | Marketplace + Delivery en Rio Grande</title>
+  <meta name="description" content="Pedi productos de comercios locales en una sola app y recibilos con delivery rapido y seguimiento en tiempo real." />
   <link rel="manifest" href="/manifest.json" />
   <link rel="stylesheet" href="/styles.css" />
+  <style>
+    .landing-shell {
+      max-width: 1160px;
+      margin: 0 auto;
+      padding: 14px 12px 80px;
+    }
+
+    .topbar {
+      position: sticky;
+      top: 10px;
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 10px 12px;
+      border-radius: 16px;
+      background: rgba(255, 255, 255, 0.84);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(15, 23, 42, 0.08);
+      box-shadow: var(--windi-shadow-sm);
+    }
+
+    .top-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .cta-btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 11px 16px;
+      border-radius: 12px;
+      font-size: 14px;
+      font-weight: 700;
+      border: 1px solid transparent;
+      text-decoration: none;
+      transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+      cursor: pointer;
+    }
+
+    .cta-primary {
+      color: #fff;
+      background: linear-gradient(135deg, var(--windi-primary) 0%, var(--windi-primary-dark) 100%);
+      box-shadow: 0 8px 24px rgba(220, 38, 38, 0.28);
+    }
+
+    .cta-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 28px rgba(220, 38, 38, 0.34);
+      text-decoration: none;
+    }
+
+    .cta-secondary {
+      color: var(--windi-text-primary);
+      background: #fff;
+      border-color: #cbd5e1;
+    }
+
+    .cta-secondary:hover {
+      border-color: var(--windi-secondary);
+      text-decoration: none;
+      transform: translateY(-2px);
+    }
+
+    .hero-wrap {
+      margin-top: 14px;
+      display: grid;
+      gap: 14px;
+      grid-template-columns: 1fr;
+    }
+
+    .hero-main {
+      position: relative;
+      overflow: hidden;
+      border-radius: 24px;
+      color: #fff;
+      background: linear-gradient(135deg, #b91c1c 0%, #1e3a8a 58%, #0ea5e9 100%);
+      padding: 26px 18px;
+      box-shadow: var(--windi-shadow-xl);
+    }
+
+    .hero-main::before,
+    .hero-main::after {
+      content: '';
+      position: absolute;
+      border-radius: 999px;
+      pointer-events: none;
+    }
+
+    .hero-main::before {
+      width: 260px;
+      height: 260px;
+      right: -90px;
+      top: -80px;
+      background: rgba(255, 255, 255, 0.11);
+    }
+
+    .hero-main::after {
+      width: 180px;
+      height: 180px;
+      left: -70px;
+      bottom: -60px;
+      background: rgba(255, 255, 255, 0.09);
+    }
+
+    .hero-main > * {
+      position: relative;
+      z-index: 1;
+    }
+
+    .hero-eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      border-radius: 999px;
+      padding: 6px 12px;
+      font-size: 12px;
+      font-weight: 700;
+      border: 1px solid rgba(255, 255, 255, 0.25);
+      background: rgba(255, 255, 255, 0.15);
+      margin-bottom: 10px;
+    }
+
+    .hero-main h1 {
+      margin: 0;
+      font-size: 36px;
+      line-height: 1.04;
+      letter-spacing: -0.03em;
+      max-width: 12ch;
+    }
+
+    .hero-subtitle {
+      margin: 12px 0 0;
+      max-width: 56ch;
+      color: rgba(255, 255, 255, 0.92);
+      font-size: 15px;
+      line-height: 1.45;
+    }
+
+    .hero-micro {
+      margin: 8px 0 0;
+      font-size: 12px;
+      color: rgba(255, 255, 255, 0.88);
+    }
+
+    .hero-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 16px;
+    }
+
+    .hero-badges {
+      margin-top: 14px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      border-radius: 999px;
+      padding: 6px 12px;
+      font-size: 12px;
+      font-weight: 700;
+      border: 1px solid rgba(255, 255, 255, 0.24);
+      color: #fff;
+      background: rgba(255, 255, 255, 0.14);
+    }
+
+    .hero-side {
+      background: #fff;
+      border: 1px solid #e2e8f0;
+      border-radius: 20px;
+      padding: 18px;
+      box-shadow: var(--windi-shadow);
+      display: grid;
+      gap: 10px;
+    }
+
+    .stat-grid {
+      display: grid;
+      gap: 10px;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .stat {
+      border: 1px solid #e2e8f0;
+      border-radius: 14px;
+      padding: 12px;
+      background: #f8fafc;
+      transition: transform 0.2s ease;
+    }
+
+    .stat:hover {
+      transform: translateY(-2px);
+    }
+
+    .stat strong {
+      display: block;
+      font-size: 22px;
+      line-height: 1;
+    }
+
+    .section {
+      margin-top: 18px;
+      background: rgba(255, 255, 255, 0.76);
+      border: 1px solid rgba(15, 23, 42, 0.07);
+      border-radius: 20px;
+      padding: 18px;
+      box-shadow: var(--windi-shadow-sm);
+    }
+
+    .section-title {
+      margin: 0;
+      font-size: 26px;
+      letter-spacing: -0.02em;
+      line-height: 1.1;
+    }
+
+    .section-sub {
+      margin: 8px 0 0;
+      color: var(--windi-text-secondary);
+      max-width: 60ch;
+      font-size: 14px;
+    }
+
+    .steps {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .step {
+      border: 1px solid #e2e8f0;
+      border-radius: 16px;
+      background: #fff;
+      padding: 14px;
+      display: grid;
+      gap: 8px;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .step:hover {
+      transform: translateY(-2px);
+      box-shadow: var(--windi-shadow);
+    }
+
+    .step-num {
+      width: 30px;
+      height: 30px;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-weight: 800;
+      background: linear-gradient(135deg, var(--windi-primary) 0%, var(--windi-secondary) 100%);
+      font-size: 13px;
+    }
+
+    .benefits-grid,
+    .trust-grid,
+    .featured-grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .benefit,
+    .trust,
+    .featured {
+      border: 1px solid #e2e8f0;
+      border-radius: 16px;
+      background: #fff;
+      padding: 14px;
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .benefit:hover,
+    .trust:hover,
+    .featured:hover {
+      transform: translateY(-2px);
+      box-shadow: var(--windi-shadow);
+    }
+
+    .featured a {
+      display: inline-flex;
+      margin-top: 8px;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .featured-cta {
+      margin-top: 14px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .final-cta {
+      margin-top: 18px;
+      border-radius: 24px;
+      background: linear-gradient(135deg, #0f172a 0%, #1e3a8a 62%, #0ea5e9 100%);
+      color: #fff;
+      padding: 24px 18px;
+      box-shadow: var(--windi-shadow-xl);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .final-cta::after {
+      content: '';
+      position: absolute;
+      right: -40px;
+      top: -20px;
+      width: 180px;
+      height: 180px;
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.12);
+    }
+
+    .final-cta h2,
+    .final-cta p,
+    .final-cta .hero-micro,
+    .final-cta .hero-actions {
+      position: relative;
+      z-index: 1;
+    }
+
+    .final-cta h2 {
+      margin: 0;
+      font-size: 30px;
+      line-height: 1.05;
+      letter-spacing: -0.03em;
+      max-width: 14ch;
+    }
+
+    .final-cta p {
+      margin: 10px 0 0;
+      color: rgba(255, 255, 255, 0.9);
+      max-width: 52ch;
+    }
+
+    .landing-fade {
+      animation: landingFade 0.45s ease;
+    }
+
+    @keyframes landingFade {
+      from {
+        opacity: 0;
+        transform: translateY(8px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    @media (min-width: 760px) {
+      .landing-shell {
+        padding: 20px 18px 94px;
+      }
+
+      .hero-wrap {
+        grid-template-columns: 1.2fr 0.8fr;
+      }
+
+      .hero-main {
+        padding: 34px;
+      }
+
+      .steps {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      .benefits-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+
+      .trust-grid {
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+      }
+
+      .featured-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+    }
+  </style>
 </head>
 <body>
-  <div class="container">
-    <div class="header">
-      <div class="brand">Windi</div>
-      <span class="badge">Delivery Urbano Rio Grande</span>
-    </div>
-
-    <section class="hero">
+  <main class="landing-shell landing-fade">
+    <header class="topbar">
       <div>
-        <h1>Delivery local, rapido y trazable.</h1>
-        <p>Windi conecta comercios y repartidores con seguimiento en tiempo real y tarifas claras por distancia.</p>
-        <div class="row">
-          <a class="badge" href="/comercio.html">Soy comercio</a>
-          <a class="badge" href="/repartidor.html">Soy repartidor</a>
-        </div>
+        <div class="brand" style="font-size:26px; color: var(--windi-text-primary);">Windi</div>
+        <div class="muted">Marketplace + Delivery en Rio Grande</div>
       </div>
-      <div class="hero-card">
-        <div class="title-row">
-          <span class="icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M12 21s7-7 7-12a7 7 0 0 0-14 0c0 5 7 12 7 12z" />
-              <circle cx="12" cy="9" r="2" />
-            </svg>
-          </span>
-          <h2>Tracking publico</h2>
-        </div>
-        <p class="muted">Pega el token para ver el envio en vivo.</p>
-        <form id="trackingForm">
-          <input id="trackingToken" placeholder="Token de tracking" required />
-          <button type="submit">Ver seguimiento</button>
-        </form>
+      <div class="top-actions">
+        <a class="cta-btn cta-secondary" href="/comercio.html">Comercio</a>
+        <a class="cta-btn cta-secondary" href="/repartidor.html">Repartidor</a>
       </div>
-    </section>
+    </header>
 
-    <section class="grid" style="margin-top:20px;">
-      <div class="card">
-        <div class="title-row">
-          <span class="icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M3 7h18" />
-              <path d="M5 7l2 10h10l2-10" />
-              <path d="M9 7V5a3 3 0 0 1 6 0v2" />
-            </svg>
-          </span>
-          <h2>Comercios</h2>
-        </div>
-        <p class="muted">Crea pedidos, comparte tracking y gestiona el historial.</p>
-      </div>
-      <div class="card">
-        <div class="title-row">
-          <span class="icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M3 12h18" />
-              <path d="M3 12l4-4" />
-              <path d="M3 12l4 4" />
-              <circle cx="18" cy="12" r="3" />
-            </svg>
-          </span>
-          <h2>Repartidores</h2>
-        </div>
-        <p class="muted">Acepta pedidos, activa tracking y cobra por kilometro.</p>
-      </div>
-      <div class="card">
-        <div class="title-row">
-          <span class="icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <rect x="3" y="4" width="18" height="14" rx="2" />
-              <path d="M7 8h10" />
-              <path d="M7 12h6" />
-            </svg>
-          </span>
-          <h2>Tiempo real</h2>
-        </div>
-        <p class="muted">Mapa vivo, estados claros y costo transparente.</p>
-      </div>
-    </section>
+    <section class="hero-wrap">
+      <article class="hero-main">
+        <div class="hero-eyebrow">Nueva forma de comprar local</div>
+        <h1>Pedí de comercios locales y recibí en minutos</h1>
+        <p class="hero-subtitle">Windi integra marketplace y delivery en una sola experiencia: elegís tu comercio, comprás en pocos pasos y seguís tu pedido en tiempo real.</p>
+        <p class="hero-micro">Empezar es rápido. Crear cuenta y hacer tu primer pedido lleva menos de 1 minuto.</p>
 
-    <section class="grid" style="margin-top:20px;">
-      <div class="card">
-        <div class="title-row">
-          <span class="icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M3 12h18" />
-              <path d="M12 3v18" />
-            </svg>
-          </span>
-          <h2>Como funciona</h2>
+        <div class="hero-actions">
+          <a id="heroPrimaryCta" class="cta-btn cta-primary" href="/marketplace-auth">Comprar ahora</a>
+          <a id="heroSecondaryCta" class="cta-btn cta-secondary" href="/marketplace-auth">Explorar comercios</a>
         </div>
-        <p class="muted">1. El comercio crea un pedido con origen y destino.</p>
-        <p class="muted">2. Windi cotiza el envio automatico por distancia.</p>
-        <p class="muted">3. Un repartidor acepta el viaje y activa tracking en tiempo real.</p>
-        <p class="muted">4. El cliente final sigue el pedido con un link unico.</p>
-      </div>
-      <div class="card">
-        <div class="title-row">
-          <span class="icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M12 1v22" />
-              <path d="M17 5H9a3 3 0 0 0 0 6h6a3 3 0 0 1 0 6H7" />
-            </svg>
-          </span>
-          <h2>Beneficios</h2>
-        </div>
-        <p class="muted">Tarifa clara: base + precio por kilometro.</p>
-        <p class="muted">Seguimiento en vivo para reducir reclamos.</p>
-        <p class="muted">Asignacion simple de viajes para repartidores.</p>
-        <p class="muted">Wallet para control de ganancias y retiros.</p>
-      </div>
-      <div class="card">
-        <div class="title-row">
-          <span class="icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <rect x="3" y="4" width="18" height="14" rx="2" />
-              <path d="M7 8h10" />
-              <path d="M7 12h6" />
-            </svg>
-          </span>
-          <h2>Opciones de pago</h2>
-        </div>
-        <p class="muted">Comercio paga envio con Mercado Pago.</p>
-        <p class="muted">Comercio puede usar flujo de transferencia MP.</p>
-        <p class="muted">Cliente puede pagar en efectivo al repartidor segun el caso.</p>
-      </div>
-    </section>
 
-    <section class="grid" style="margin-top:20px;">
-      <div class="card">
-        <div class="title-row">
-          <span class="icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M4 19h16" />
-              <path d="M5 19l2-8h10l2 8" />
-              <path d="M9 11V7a3 3 0 0 1 6 0v4" />
-            </svg>
-          </span>
-          <h2>Para comercios</h2>
+        <div class="hero-badges">
+          <span class="pill">Entrega rápida</span>
+          <span class="pill">Comercios locales</span>
+          <span class="pill">Tracking en vivo</span>
+          <span class="pill">Promos exclusivas</span>
         </div>
-        <p class="muted">Crea pedidos en segundos.</p>
-        <p class="muted">Conoce el costo antes de confirmar.</p>
-        <p class="muted">Comparte tracking por URL sin apps extras.</p>
-      </div>
-      <div class="card">
-        <div class="title-row">
-          <span class="icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="9" />
-              <path d="M12 7v5l3 3" />
-            </svg>
-          </span>
-          <h2>Para repartidores</h2>
-        </div>
-        <p class="muted">Ve viajes disponibles y monto del envio.</p>
-        <p class="muted">Tracking automatico desde el celular.</p>
-        <p class="muted">Historial y wallet para control diario.</p>
-      </div>
-      <div class="card">
-        <div class="title-row">
-          <span class="icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M12 21s7-7 7-12a7 7 0 0 0-14 0c0 5 7 12 7 12z" />
-              <circle cx="12" cy="9" r="2" />
-            </svg>
-          </span>
-          <h2>Para clientes finales</h2>
-        </div>
-        <p class="muted">No necesitan registrarse para seguir el pedido.</p>
-        <p class="muted">Pueden ver estado y ubicacion del delivery en vivo.</p>
-        <p class="muted">Mas transparencia y mejor experiencia de entrega.</p>
-      </div>
-    </section>
+      </article>
 
-    <section style="margin-top:20px;">
-      <div class="card">
-        <div class="title-row">
-          <span class="icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M9 9a3 3 0 1 1 3 3v2" />
-              <path d="M12 17h.01" />
-              <circle cx="12" cy="12" r="9" />
-            </svg>
-          </span>
-          <h2>FAQ rapido</h2>
-        </div>
-        <div class="list">
-          <div class="item">
-            <strong>Como se calcula el envio?</strong>
-            <div class="muted">Base fija + precio por kilometro segun la ruta entre origen y destino.</div>
+      <aside class="hero-side">
+        <h2 style="margin:0; font-size:22px;">Todo en una sola app</h2>
+        <p class="muted">Comprá, pagá y seguí el envío desde el mismo lugar. Sin fricción y con soporte directo.</p>
+        <div class="stat-grid">
+          <div class="stat">
+            <strong id="activeMerchants">--</strong>
+            <span class="muted">Comercios activos</span>
           </div>
-          <div class="item">
-            <strong>El cliente final necesita cuenta?</strong>
-            <div class="muted">No. Solo abre el link de tracking y ve el estado en tiempo real.</div>
+          <div class="stat">
+            <strong>24/7</strong>
+            <span class="muted">Acceso web y app</span>
           </div>
-          <div class="item">
-            <strong>Que opciones de pago hay?</strong>
-            <div class="muted">Mercado Pago, transferencia por MP y pago en efectivo al delivery segun el flujo elegido.</div>
+          <div class="stat">
+            <strong>3 pasos</strong>
+            <span class="muted">Hasta completar pedido</span>
           </div>
-          <div class="item">
-            <strong>Cuanto tarda activar un pedido?</strong>
-            <div class="muted">Es inmediato. Cuando un repartidor acepta, el estado pasa a "en-camino".</div>
+          <div class="stat">
+            <strong>100%</strong>
+            <span class="muted">Seguimiento en tiempo real</span>
           </div>
         </div>
+      </aside>
+    </section>
+
+    <section class="section">
+      <h2 class="section-title">Cómo funciona</h2>
+      <p class="section-sub">Simple, rápido y pensado para que hagas tu compra sin vueltas.</p>
+      <div class="steps">
+        <article class="step">
+          <span class="step-num">1</span>
+          <strong>Elegí tu comercio</strong>
+          <div class="muted">Explorá locales cercanos y encontrá lo que necesitás.</div>
+        </article>
+        <article class="step">
+          <span class="step-num">2</span>
+          <strong>Agregá productos al carrito</strong>
+          <div class="muted">Armá tu pedido y confirmá en segundos.</div>
+        </article>
+        <article class="step">
+          <span class="step-num">3</span>
+          <strong>Recibí en minutos</strong>
+          <div class="muted">Seguimiento en vivo desde la preparación hasta la entrega.</div>
+        </article>
       </div>
     </section>
 
-    <div class="footer">PWA lista para empaquetar como TWA (Android). <a href="/terminos.html">Terminos y Condiciones</a>.</div>
-  </div>
+    <section class="section">
+      <h2 class="section-title">Beneficios para vos</h2>
+      <p class="section-sub">Windi está diseñado para que comprar local sea más rápido, cómodo y confiable.</p>
+      <div class="benefits-grid">
+        <article class="benefit">
+          <strong>Entregas rápidas y con tracking</strong>
+          <div class="muted">Sabés dónde va tu pedido en cada momento.</div>
+        </article>
+        <article class="benefit">
+          <strong>Múltiples comercios en un solo lugar</strong>
+          <div class="muted">Encontrá variedad sin abrir varias apps.</div>
+        </article>
+        <article class="benefit">
+          <strong>Pagos simples y seguros</strong>
+          <div class="muted">Proceso claro y opciones cómodas para comprar.</div>
+        </article>
+        <article class="benefit">
+          <strong>Funciona como app</strong>
+          <div class="muted">Usala en web o agregala a pantalla de inicio como PWA.</div>
+        </article>
+        <article class="benefit">
+          <strong>Apoyo a comercios locales</strong>
+          <div class="muted">Comprás cerca y fortalecés la economía local.</div>
+        </article>
+        <article class="benefit">
+          <strong>Promociones exclusivas</strong>
+          <div class="muted">Accedé a oportunidades pensadas para clientes frecuentes.</div>
+        </article>
+      </div>
+    </section>
+
+    <section class="section">
+      <div class="row" style="align-items:flex-end; gap: 14px;">
+        <div>
+          <h2 class="section-title">Comercios y categorías destacadas</h2>
+          <p class="section-sub">Descubrí opciones activas y empezá tu pedido ahora.</p>
+        </div>
+        <div class="featured-cta">
+          <a id="viewAllCta" class="cta-btn cta-secondary" href="/marketplace-auth">Ver todos</a>
+        </div>
+      </div>
+      <div id="featuredMerchants" class="featured-grid">
+        <article class="featured">
+          <strong>Almacén</strong>
+          <div class="muted">Productos diarios y compras rápidas.</div>
+        </article>
+        <article class="featured">
+          <strong>Farmacia</strong>
+          <div class="muted">Artículos de cuidado y bienestar.</div>
+        </article>
+        <article class="featured">
+          <strong>Pet Shop</strong>
+          <div class="muted">Todo para tus mascotas en un clic.</div>
+        </article>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2 class="section-title">Confianza y seguridad</h2>
+      <p class="section-sub">Tu primer pedido tiene que sentirse seguro desde el inicio.</p>
+      <div class="trust-grid">
+        <article class="trust">
+          <strong>Comercios verificados</strong>
+          <div class="muted">Operamos con perfiles validados.</div>
+        </article>
+        <article class="trust">
+          <strong>Seguimiento en tiempo real</strong>
+          <div class="muted">Visibilidad total del envío.</div>
+        </article>
+        <article class="trust">
+          <strong>Soporte directo</strong>
+          <div class="muted">Canales de ayuda ante cualquier duda.</div>
+        </article>
+        <article class="trust">
+          <strong>Plataforma confiable</strong>
+          <div class="muted">Flujo unificado marketplace + delivery.</div>
+        </article>
+      </div>
+    </section>
+
+    <section class="final-cta">
+      <h2>Tu próxima compra local empieza en Windi</h2>
+      <p>Entrá ahora, explorá comercios y recibí tu pedido sin perder tiempo.</p>
+      <div class="hero-actions">
+        <a id="finalPrimaryCta" class="cta-btn cta-primary" href="/marketplace-auth">Empezar ahora</a>
+        <a class="cta-btn cta-secondary" href="/tracking.html">Ya tengo un tracking</a>
+      </div>
+      <p class="hero-micro">Marketplace + delivery en una sola plataforma.</p>
+    </section>
+
+    <div class="footer" style="margin-top:16px;">Al registrarte y usar Windi aceptás nuestros <a href="/terminos.html">Términos y Condiciones</a>.</div>
+  </main>
 
   <script src="/js/sw-register.js"></script>
-  <script>
-    document.getElementById('trackingForm').addEventListener('submit', (e) => {
-      e.preventDefault();
-      const token = document.getElementById('trackingToken').value.trim();
-      if (!token) return;
-      window.location.href = `/tracking.html?t=${encodeURIComponent(token)}`;
+  <script type="module">
+    import { auth, db } from '/js/firebase.js';
+    import { onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js';
+    import { ref, onValue } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-database.js';
+
+    const primaryTargets = [
+      document.getElementById('heroPrimaryCta'),
+      document.getElementById('heroSecondaryCta'),
+      document.getElementById('viewAllCta'),
+      document.getElementById('finalPrimaryCta')
+    ].filter(Boolean);
+
+    function applyCtaTarget(isAuthed) {
+      const href = isAuthed ? '/marketplace' : '/marketplace-auth';
+      primaryTargets.forEach((el) => {
+        el.setAttribute('href', href);
+      });
+    }
+
+    onAuthStateChanged(auth, (user) => {
+      applyCtaTarget(!!user);
+    });
+
+    const activeMerchantsEl = document.getElementById('activeMerchants');
+    const featuredContainer = document.getElementById('featuredMerchants');
+
+    onValue(ref(db, 'merchants'), (snap) => {
+      const data = snap.val() || {};
+      const activeEntries = Object.entries(data)
+        .filter(([, merchant]) => (merchant.status || 'active') === 'active');
+
+      activeMerchantsEl.textContent = String(activeEntries.length);
+
+      if (!activeEntries.length) return;
+      const top = activeEntries.slice(0, 6);
+      featuredContainer.innerHTML = '';
+      top.forEach(([id, merchant]) => {
+        const card = document.createElement('article');
+        card.className = 'featured';
+        card.innerHTML = `
+          <strong>${merchant.name || 'Comercio local'}</strong>
+          <div class="muted">${merchant.address || 'Marketplace Windi'}</div>
+          <a href="/marketplace?merchantId=${encodeURIComponent(id)}">Ver productos</a>
+        `;
+        featuredContainer.appendChild(card);
+      });
+    }, () => {
+      activeMerchantsEl.textContent = '--';
     });
   </script>
 </body>

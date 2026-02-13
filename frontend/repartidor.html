@@ -84,6 +84,28 @@
         <div class="title-row">
           <span class="icon">
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 2v4" />
+              <path d="M12 18v4" />
+              <path d="M4.93 4.93l2.83 2.83" />
+              <path d="M16.24 16.24l2.83 2.83" />
+              <path d="M2 12h4" />
+              <path d="M18 12h4" />
+              <path d="M4.93 19.07l2.83-2.83" />
+              <path d="M16.24 7.76l2.83-2.83" />
+            </svg>
+          </span>
+          <h2>Estado GPS</h2>
+        </div>
+        <div id="gpsStateBadge" class="status pending">Buscando señal</div>
+        <div id="gpsInfo" class="muted" style="margin-top:8px;">Esperando permisos de ubicación...</div>
+        <div class="row" style="margin-top:10px;">
+          <button id="gpsRetryBtn" type="button" class="secondary">Reintentar GPS</button>
+        </div>
+      </div>
+      <div class="card">
+        <div class="title-row">
+          <span class="icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M3 12h18" />
               <path d="M7 12l-4-4" />
               <path d="M7 12l-4 4" />
@@ -92,6 +114,11 @@
           <h2>Pedido activo</h2>
         </div>
         <div id="activoInfo" class="muted">No hay pedido activo.</div>
+        <div id="deliveryDistanceInfo" class="muted">Sin destino activo.</div>
+        <div id="navEtaInfo" class="muted">Sin ruta activa.</div>
+        <button id="navPickupBtn" class="secondary">Ir a retirar (Google Maps)</button>
+        <button id="markPickedUpBtn">Marcar retirado</button>
+        <button id="navDropoffBtn" class="secondary">Ir a entregar (Google Maps)</button>
         <button id="startTrackingBtn" class="secondary">Iniciar tracking</button>
         <button id="stopTrackingBtn" class="danger">Detener tracking</button>
         <button id="deliverBtn">Marcar entregado</button>

@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Windi | Checkout</title>
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="brand">Checkout</div>
+      <div class="row" style="max-width:420px;">
+        <a class="badge" href="/cart">Carrito</a>
+        <a class="badge" href="/marketplace">Marketplace</a>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:16px;">
+      <div class="title-row"><span class="icon">R</span><h2>Resumen</h2></div>
+      <div id="summary" class="list"></div>
+    </div>
+
+    <div class="card" style="margin-top:16px;">
+      <div class="title-row"><span class="icon">E</span><h2>Entrega</h2></div>
+      <form id="checkoutForm">
+        <input id="deliveryAddress" placeholder="Direccion de entrega en Rio Grande" required />
+        <div class="muted">Selecciona una direccion de la lista para continuar.</div>
+        <div id="shippingHint" class="muted">Calculando envio automaticamente...</div>
+        <textarea id="deliveryNotes" placeholder="Notas de entrega"></textarea>
+        <select id="paymentMethod" required>
+          <option value="cash_on_delivery">Efectivo (Al recibir)</option>
+          <option value="transfer_on_delivery">Transferencia (Al recibir)</option>
+          <option value="mp_card">Tarjeta (Mercado Pago)</option>
+        </select>
+        <button type="submit">Pagar ahora</button>
+      </form>
+    </div>
+
+    <div class="card" style="margin-top:16px;">
+      <div class="title-row"><span class="icon">S</span><h2>Sesion cliente</h2></div>
+      <div class="row">
+        <input id="loginEmail" type="email" placeholder="Email" />
+        <input id="loginPassword" type="password" placeholder="Contrasena" />
+      </div>
+      <div class="row">
+        <button id="loginBtn" type="button" class="secondary">Ingresar</button>
+      </div>
+      <div id="authState" class="muted"></div>
+    </div>
+
+    <div id="status" class="footer"></div>
+  </div>
+
+  <script src="/js/sw-register.js"></script>
+  <script type="module" src="/js/checkout.js"></script>
+</body>
+</html>

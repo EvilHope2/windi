@@ -1,0 +1,16 @@
+node_modules/
+backend/node_modules/
+functions/node_modules/
+
+.firebase/
+.gradle/
+build/
+app/build/
+
+*.apk
+*.idsig
+*.keystore
+local.properties
+
+.DS_Store
+Thumbs.db

@@ -1,0 +1,65 @@
+﻿<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Windi | Comercio Marketplace</title>
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand">Windi</div>
+      <div class="muted">Marketplace Comercio</div>
+      <nav class="nav">
+        <a class="active" href="#products">Productos</a>
+        <a href="#orders">Pedidos</a>
+        <a href="/comercio.html">Panel comercio</a>
+      </nav>
+    </aside>
+
+    <main class="content">
+      <div class="header">
+        <div class="brand">Marketplace</div>
+        <div class="row" style="max-width:520px;">
+          <button id="logoutBtn" class="secondary">Salir</button>
+        </div>
+      </div>
+
+      <div id="authSection" class="card">
+        <div class="title-row"><span class="icon">🔐</span><h2>Ingreso comercio</h2></div>
+        <input id="loginEmail" type="email" placeholder="Email" />
+        <input id="loginPassword" type="password" placeholder="Contrasena" />
+        <button id="loginBtn">Ingresar</button>
+      </div>
+
+      <div id="appSection" class="grid hidden">
+        <div class="card" id="products">
+          <div class="title-row"><span class="icon">📦</span><h2>Productos</h2></div>
+          <form id="productForm">
+            <input id="pName" placeholder="Nombre" required />
+            <textarea id="pDesc" placeholder="Descripcion"></textarea>
+            <input id="pPrice" type="number" placeholder="Precio (ARS)" required />
+            <input id="pCategory" placeholder="Categoria" />
+            <input id="pImage" placeholder="URL de imagen" />
+            <input id="pStock" type="number" placeholder="Stock (opcional)" />
+            <button type="submit">Guardar producto</button>
+          </form>
+          <div id="productsList" class="list" style="margin-top:10px;"></div>
+        </div>
+
+        <div class="card" id="orders">
+          <div class="title-row"><span class="icon">🧾</span><h2>Pedidos marketplace</h2></div>
+          <div id="ordersList" class="list"></div>
+        </div>
+      </div>
+
+      <div id="status" class="footer"></div>
+    </main>
+  </div>
+
+  <script src="/js/sw-register.js"></script>
+  <script type="module" src="/js/comercio-marketplace.js"></script>
+</body>
+</html>

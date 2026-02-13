@@ -1,6 +1,7 @@
 import { db } from './firebase.js';
 import { ref, onValue } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-database.js';
 import { qs, fmtMoney, fmtTime } from './utils.js';
+import { getMapboxToken } from './mapbox-token.js';
 
 const trackingInfo = qs('trackingInfo');
 const mapLink = qs('mapLink');
@@ -9,8 +10,6 @@ const mapContainer = qs('map');
 
 const params = new URLSearchParams(window.location.search);
 const token = params.get('t');
-
-const MAPBOX_TOKEN = 'pk.eyJ1IjoiZGVsaXZlcnktcmcxIiwiYSI6ImNtbDZzdDg1ZDBlaTEzY29ta2k4OWVtZjIifQ.hzW7kFuwLzx2pHtCMDLPXQ';
 
 let map = null;
 let marker = null;
@@ -21,13 +20,15 @@ function setStatus(msg) {
   statusEl.textContent = msg || '';
 }
 
-function ensureMap(loc) {
+async function ensureMap(loc) {
   if (!map || !window.mapboxgl) {
     if (!window.mapboxgl) return;
-    mapboxgl.accessToken = MAPBOX_TOKEN;
+    const token = await getMapboxToken();
+    if (!token) return;
+    mapboxgl.accessToken = token;
     map = new mapboxgl.Map({
       container: mapContainer,
-      style: 'mapbox://styles/mapbox/streets-v12',
+      style: 'mapbox://styles/mapbox/navigation-day-v1',
       center: [loc.lng, loc.lat],
       zoom: 14
     });
@@ -102,7 +103,7 @@ if (!token) {
     `;
 
     if (loc) {
-      ensureMap(loc);
+      ensureMap(loc).catch(() => {});
       updateRoute(loc);
       const url = `https://www.mapbox.com/maps/#map=15/${loc.lat}/${loc.lng}`;
       mapLink.innerHTML = `<a href="${url}" target="_blank" rel="noreferrer">Abrir en Mapbox</a>`;

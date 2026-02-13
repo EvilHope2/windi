@@ -7,15 +7,15 @@
   <link rel="manifest" href="/manifest.json" />
   <link rel="stylesheet" href="/styles.css" />
   <link href="https://api.mapbox.com/mapbox-gl-js/v3.5.0/mapbox-gl.css" rel="stylesheet" />
-  <link href="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-geocoder/v5.0.1/mapbox-gl-geocoder.css" rel="stylesheet" />
 </head>
-<body>
-  <div class="app-shell">
-    <aside class="sidebar">
+<body class="auth-layout">
+  <div id="appShell" class="app-shell">
+    <aside id="sidebar" class="sidebar">
       <div class="brand">Windi</div>
       <div class="muted">Panel Comercio</div>
       <nav class="nav">
         <a class="active" href="#nuevo">Nuevo pedido</a>
+        <a href="/comercio-marketplace.html">Marketplace</a>
         <a href="#activos">Pedidos activos</a>
         <a href="#historial">Historial</a>
         <a href="#mapa">Mapa</a>
@@ -57,8 +57,27 @@
             </span>
             <h2>Crear cuenta</h2>
           </div>
+          <input id="signupNombreApellido" placeholder="Nombre y Apellido responsable" required />
           <input id="signupEmail" type="email" placeholder="Email" required />
+          <input id="signupWhatsapp" placeholder="WhatsApp" required />
           <input id="signupPassword" type="password" placeholder="Contrasena" required />
+          <input id="signupComercioNombre" placeholder="Nombre del comercio" required />
+          <select id="signupCategoria" required>
+            <option value="">Categoria</option>
+            <option value="Almacen">Almacen</option>
+            <option value="Kiosco">Kiosco</option>
+            <option value="Farmacia">Farmacia</option>
+            <option value="Pet Shop">Pet Shop</option>
+            <option value="Panaderia">Panaderia</option>
+            <option value="Rotiseria">Rotiseria</option>
+            <option value="Otro">Otro</option>
+          </select>
+          <input id="signupDireccion" placeholder="Direccion completa del comercio" required />
+          <input id="signupLat" type="hidden" />
+          <input id="signupLng" type="hidden" />
+          <div class="muted">La ubicacion exacta se calcula automaticamente desde la direccion.</div>
+          <input id="signupHorario" placeholder="Horario de atencion (ej. 09:00 a 21:00)" />
+          <input id="signupPrepTime" type="number" min="1" placeholder="Tiempo promedio de preparacion (minutos)" />
           <div class="inline-check">
             <input id="signupTermsComercio" type="checkbox" />
             <label for="signupTermsComercio">
@@ -67,6 +86,19 @@
           </div>
           <button id="signupBtn">Registrarme</button>
         </div>
+      </div>
+
+      <div id="pendingSection" class="card hidden">
+        <div class="title-row">
+          <span class="icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 6v6l4 2" />
+              <circle cx="12" cy="12" r="9" />
+            </svg>
+          </span>
+          <h2>Comercio pendiente de verificacion</h2>
+        </div>
+        <div id="pendingMessage" class="muted">Tu comercio esta pendiente de verificacion manual por el administrador.</div>
       </div>
 
       <div id="appSection" class="grid hidden">
@@ -97,6 +129,24 @@
             </div>
           </div>
         </div>
+        <div class="card">
+          <div class="title-row">
+            <span class="icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="9" />
+                <path d="M12 8v4l3 3" />
+              </svg>
+            </span>
+            <h2>Estado del local</h2>
+          </div>
+          <div id="storeOpenBadge" class="status pending">Cargando...</div>
+          <div id="storeOpenModeText" class="muted" style="margin-top:8px;">Modo automatico por horario.</div>
+          <div class="row" style="margin-top:10px;">
+            <button id="storeModeAutoBtn" type="button" class="secondary">Automatico</button>
+            <button id="storeOpenNowBtn" type="button">Abrir ahora</button>
+            <button id="storeCloseNowBtn" type="button" class="danger">Cerrar ahora</button>
+          </div>
+        </div>
         <div class="card" id="nuevo">
           <div class="title-row">
             <span class="icon">
@@ -108,8 +158,6 @@
             <h2>Nuevo pedido</h2>
           </div>
           <form id="pedidoForm">
-            <div class="geocoder" id="geocoder-origen"></div>
-            <div class="geocoder" id="geocoder-destino"></div>
             <input id="origen" placeholder="Origen" required />
             <input id="destino" placeholder="Destino" required />
             <input id="totalPedido" type="number" placeholder="Total del pedido (ej. 20000)" required />
@@ -174,7 +222,6 @@
   </div>
 
   <script src="https://api.mapbox.com/mapbox-gl-js/v3.5.0/mapbox-gl.js"></script>
-  <script src="https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-geocoder/v5.0.1/mapbox-gl-geocoder.min.js"></script>
   <script src="/js/sw-register.js"></script>
   <script type="module" src="/js/comercio.js"></script>
 </body>

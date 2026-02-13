@@ -1,0 +1,81 @@
+﻿<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Windi | Marketplace</title>
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="mp-shell">
+    <header class="mp-topbar">
+      <div class="mp-brand">Windi</div>
+      <div class="mp-topbar-actions">
+        <span id="authInfo" class="muted">Cargando sesion...</span>
+        <a class="mp-link-btn" href="/index.html">Inicio</a>
+        <a class="mp-link-btn" href="/mi-cuenta">Mi cuenta</a>
+        <a class="mp-link-btn" href="/me/orders">Mis pedidos</a>
+        <button id="logoutBtn" class="mp-link-btn">Salir</button>
+      </div>
+    </header>
+
+    <div class="mp-search-sticky">
+      <input id="merchantSearch" class="mp-search" placeholder="Buscar comercios o productos" />
+      <div id="chipFilters" class="mp-chips">
+        <button class="mp-chip active" data-filter="all">Todos</button>
+        <button class="mp-chip" data-filter="promo">Promos</button>
+        <button class="mp-chip" data-filter="popular">Mas vendidos</button>
+      </div>
+      <div id="dynamicCategoryChips" class="mp-chips"></div>
+    </div>
+
+    <main id="marketplaceHome" class="mp-view active">
+      <section class="mp-section-head">
+        <h1>Comercios locales</h1>
+        <p>Pedidos rapidos con seguimiento en tiempo real.</p>
+      </section>
+      <section id="merchantList" class="mp-merchant-list"></section>
+      <div class="mp-load-wrap">
+        <button id="loadMoreMerchantsBtn" class="secondary">Ver mas comercios</button>
+      </div>
+    </main>
+
+    <main id="merchantDetailView" class="mp-view">
+      <button id="backToMarketplaceBtn" class="mp-back-btn">Volver a comercios</button>
+      <section id="merchantHero" class="mp-merchant-hero"></section>
+      <div class="mp-merchant-meta">
+        <h2 id="merchantNameTitle"></h2>
+        <p id="merchantMetaSubtitle"></p>
+        <button id="shareMerchantBtn" class="mp-link-btn">Compartir</button>
+      </div>
+      <div id="productCategoryTabs" class="mp-tabs"></div>
+      <section id="productList" class="mp-product-list"></section>
+    </main>
+
+    <div id="status" class="footer"></div>
+
+    <div id="singleMerchantModal" class="mp-modal hidden" role="dialog" aria-modal="true">
+      <div class="mp-modal-card">
+        <h3>Carrito de un solo comercio</h3>
+        <p>Ya tenes productos de otro comercio. Para seguir, debes vaciar el carrito actual.</p>
+        <div class="mp-modal-actions">
+          <button id="cancelMerchantSwitchBtn" class="secondary">Cancelar</button>
+          <button id="confirmMerchantSwitchBtn">Vaciar y cambiar</button>
+        </div>
+      </div>
+    </div>
+
+    <a id="floatingCartBar" class="mp-cart-float hidden" href="/cart">
+      <div>
+        <strong id="floatingCartCount">0 productos</strong>
+        <div id="floatingCartMerchant" class="muted">Carrito Windi</div>
+      </div>
+      <div id="floatingCartTotal">Ver carrito</div>
+    </a>
+  </div>
+
+  <script src="/js/sw-register.js"></script>
+  <script type="module" src="/js/marketplace.js"></script>
+</body>
+</html>

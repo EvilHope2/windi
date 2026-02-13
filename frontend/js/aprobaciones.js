@@ -111,7 +111,22 @@ onAuthStateChanged(auth, async (user) => {
   appSection.classList.remove('hidden');
   setStatus('');
 
-  onValue(ref(db, 'users'), (snap) => {
-    renderPending(snap.val());
-  });
+  try {
+    const initial = await get(ref(db, 'users'));
+    renderPending(initial.val());
+  } catch (err) {
+    pendingInfo.textContent = 'No se pudieron cargar usuarios.';
+    setStatus(`Error leyendo usuarios: ${err.message}`);
+  }
+
+  onValue(
+    ref(db, 'users'),
+    (snap) => {
+      renderPending(snap.val());
+    },
+    (err) => {
+      pendingInfo.textContent = 'No se pudieron cargar usuarios.';
+      setStatus(`Permiso denegado o reglas no desplegadas: ${err.message}`);
+    }
+  );
 });

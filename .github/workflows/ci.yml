@@ -1,0 +1,33 @@
+name: Windi CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Syntax and static checks
+        run: npm run check
+
+      - name: Unit and integration tests
+        run: npm test
+
+      - name: Smoke tests
+        run: npm run smoke

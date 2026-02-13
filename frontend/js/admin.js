@@ -30,11 +30,17 @@ const walletAdjustAmount = qs('walletAdjustAmount');
 const walletAdjustReason = qs('walletAdjustReason');
 const walletAdjustBtn = qs('walletAdjustBtn');
 const tripList = qs('tripList');
+const commercePendingInfo = qs('commercePendingInfo');
+const commercePendingList = qs('commercePendingList');
 
 let allDeliveries = {};
+let allUsers = {};
+let allMerchants = {};
 let wallets = {};
 let selectedUid = null;
 let hasAdminAccess = false;
+let usersLoaded = false;
+let merchantsLoaded = false;
 
 function setStatus(msg) {
   statusEl.textContent = msg || '';
@@ -186,6 +192,116 @@ function renderDeliveryList() {
   });
 }
 
+function renderPendingCommerces() {
+  if (!commercePendingList || !commercePendingInfo) return;
+  commercePendingList.innerHTML = '';
+  if (!usersLoaded && !merchantsLoaded) {
+    commercePendingInfo.textContent = 'Cargando comercios pendientes...';
+    return;
+  }
+
+  const isPending = (status) => {
+    const s = (status || '').toString().toLowerCase();
+    return s === 'pendiente' || s === 'pending';
+  };
+
+  const pendingMap = new Map();
+  Object.entries(allUsers || {})
+    .filter(([, u]) => (u.role || '').toString().toLowerCase() === 'comercio' && isPending(u.status || 'pendiente'))
+    .forEach(([uid, u]) => pendingMap.set(uid, u));
+
+  Object.entries(allMerchants || {})
+    .filter(([, m]) => isPending(m.status || 'pendiente'))
+    .forEach(([uid, m]) => {
+      if (pendingMap.has(uid)) return;
+      pendingMap.set(uid, {
+        role: 'comercio',
+        status: m.status || 'pendiente',
+        comercioNombre: m.name || '',
+        nombreApellido: m.ownerName || '',
+        email: m.ownerEmail || '',
+        whatsapp: m.whatsapp || '',
+        direccion: m.address || '',
+        categoria: m.category || '',
+        horario: m.schedule || null,
+        prepTimeMin: m.prepTimeMin || null,
+        geo: m.geo || null,
+        createdAt: m.createdAt || Date.now()
+      });
+    });
+
+  const entries = Array.from(pendingMap.entries())
+    .sort((a, b) => (b[1].createdAt || 0) - (a[1].createdAt || 0));
+
+  commercePendingInfo.textContent = `${entries.length} comercios pendientes.`;
+  if (!entries.length) {
+    commercePendingList.innerHTML = '<div class="item"><div class="muted">No hay comercios pendientes.</div></div>';
+    return;
+  }
+
+  entries.forEach(([uid, c]) => {
+    const div = document.createElement('div');
+    div.className = 'item';
+    div.innerHTML = `
+      <div><strong>${c.comercioNombre || c.email || 'Comercio'}</strong></div>
+      <div class="muted">Responsable: ${c.nombreApellido || '-'}</div>
+      <div class="muted">Email: ${c.email || '-'}</div>
+      <div class="muted">WhatsApp: ${c.whatsapp || '-'}</div>
+      <div class="muted">Direccion: ${c.direccion || '-'}</div>
+      <div class="muted">Categoria: ${c.categoria || '-'}</div>
+      <div class="muted">Registrado: ${fmtTime(c.createdAt)}</div>
+      <div class="row">
+        <button data-action="approve">Aprobar</button>
+        <button data-action="reject" class="danger">Rechazar</button>
+      </div>
+    `;
+    div.querySelector('[data-action="approve"]').addEventListener('click', () => approveCommerce(uid, c));
+    div.querySelector('[data-action="reject"]').addEventListener('click', () => rejectCommerce(uid, c));
+    commercePendingList.appendChild(div);
+  });
+}
+
+async function approveCommerce(uid, data) {
+  const now = Date.now();
+  await update(ref(db, `users/${uid}`), {
+    status: 'activo',
+    commerceVerifiedAt: now,
+    validationUpdatedAt: now
+  });
+  await update(ref(db, `merchants/${uid}`), {
+    name: data.comercioNombre || data.email || 'Comercio',
+    category: data.categoria || 'Otro',
+    address: data.direccion || '',
+    geo: data.geo || null,
+    whatsapp: data.whatsapp || '',
+    schedule: data.horario || null,
+    prepTimeMin: data.prepTimeMin || null,
+    status: 'activo',
+    isVerified: true,
+    ownerName: data.nombreApellido || '',
+    ownerEmail: data.email || '',
+    updatedAt: now
+  });
+  setStatus('Comercio aprobado y activado.');
+}
+
+async function rejectCommerce(uid) {
+  const reason = window.prompt('Motivo de rechazo (opcional):', '') || '';
+  const now = Date.now();
+  await update(ref(db, `users/${uid}`), {
+    status: 'rechazado',
+    rejectionReason: reason || null,
+    validationUpdatedAt: now
+  });
+  await update(ref(db, `merchants/${uid}`), {
+    status: 'rechazado',
+    isVerified: false,
+    rejectionReason: reason || null,
+    updatedAt: now
+  });
+  setStatus('Comercio rechazado.');
+}
+
 async function setValidation(validationStatus) {
   if (!selectedUid) return;
   await update(ref(db, `users/${selectedUid}`), {
@@ -296,9 +412,31 @@ onAuthStateChanged(auth, async (user) => {
   setStatus('');
 
   onValue(ref(db, 'users'), (snap) => {
-    allDeliveries = snap.val() || {};
+    usersLoaded = true;
+    allUsers = snap.val() || {};
+    allDeliveries = allUsers;
     renderDeliveryList();
     renderSelectedDelivery();
+    renderPendingCommerces();
+  }, (err) => {
+    usersLoaded = true;
+    allUsers = {};
+    allDeliveries = {};
+    setStatus(`No se pudo leer usuarios: ${err.message}`);
+    renderDeliveryList();
+    renderSelectedDelivery();
+    renderPendingCommerces();
+  });
+
+  onValue(ref(db, 'merchants'), (snap) => {
+    merchantsLoaded = true;
+    allMerchants = snap.val() || {};
+    renderPendingCommerces();
+  }, (err) => {
+    merchantsLoaded = true;
+    allMerchants = {};
+    setStatus(`No se pudo leer comercios: ${err.message}`);
+    renderPendingCommerces();
   });
 
   onValue(ref(db, 'wallets'), (snap) => {

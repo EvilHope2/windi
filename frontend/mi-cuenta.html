@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Windi | Mi cuenta</title>
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="stylesheet" href="/styles.css" />
+  <link href="https://api.mapbox.com/mapbox-gl-js/v3.5.0/mapbox-gl.css" rel="stylesheet" />
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="brand">Mi cuenta</div>
+      <div class="row" style="max-width:560px;">
+        <a class="badge" href="/marketplace">Marketplace</a>
+        <a class="badge" href="/cart">Carrito</a>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:16px;">
+      <div class="title-row"><span class="icon">D</span><h2>Direccion de entrega</h2></div>
+      <div class="muted" style="margin-bottom:10px;">
+        Ajusta el marcador para indicar exactamente donde queres recibir tu pedido.
+      </div>
+      <form id="addressForm">
+        <input id="address" placeholder="Ej: Bernardo O'Higgins 45, Rio Grande" required />
+        <input id="reference" placeholder="Referencia (ej: casa blanca, porton negro)" />
+        <div id="addressMap" class="map"></div>
+        <button type="submit">Guardar direccion</button>
+      </form>
+    </div>
+
+    <div id="status" class="footer"></div>
+  </div>
+  <script src="https://api.mapbox.com/mapbox-gl-js/v3.5.0/mapbox-gl.js"></script>
+  <script src="/js/sw-register.js"></script>
+  <script type="module" src="/js/mi-cuenta.js"></script>
+</body>
+</html>

@@ -4,7 +4,10 @@
   "type": "module",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node --test",
+    "check": "node --check server.js && node scripts/check-frontend-syntax.mjs",
+    "smoke": "node --test test/marketplace.test.js test/delivery.test.js"
   },
   "dependencies": {
     "cors": "^2.8.5",

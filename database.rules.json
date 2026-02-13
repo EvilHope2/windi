@@ -1,9 +1,16 @@
 {
   "rules": {
-    "users": {
+    "admins": {
       "$uid": {
         ".read": "auth != null && auth.uid == $uid",
-        ".write": "auth != null && auth.uid == $uid"
+        ".write": "auth != null && root.child('admins/' + auth.uid).val() == true"
+      }
+    },
+    "users": {
+      ".read": "auth != null && root.child('admins/' + auth.uid).val() == true",
+      "$uid": {
+        ".read": "auth != null && (auth.uid == $uid || root.child('admins/' + auth.uid).val() == true)",
+        ".write": "auth != null && (auth.uid == $uid || root.child('admins/' + auth.uid).val() == true)"
       }
     },
     "orders": {
@@ -11,26 +18,61 @@
       ".write": "auth != null",
       ".indexOn": ["comercioId", "estado", "repartidorId", "trackingToken"]
     },
+    "merchants": {
+      ".read": true,
+      "$merchantId": {
+        ".write": "auth != null && (auth.uid == $merchantId || root.child('admins/' + auth.uid).val() == true)"
+      }
+    },
+    "products": {
+      ".read": true,
+      "$productId": {
+        ".write": "auth != null && (root.child('admins/' + auth.uid).val() == true || (((!data.exists() && newData.child('merchantId').val() == auth.uid) || (data.exists() && data.child('merchantId').val() == auth.uid)) && root.child('users/' + auth.uid + '/role').val() == 'comercio' && (root.child('users/' + auth.uid + '/status').val() == 'activo' || root.child('users/' + auth.uid + '/status').val() == 'active') && (root.child('merchants/' + auth.uid + '/status').val() == 'activo' || root.child('merchants/' + auth.uid + '/status').val() == 'active')))"
+      }
+    },
+    "marketplaceOrders": {
+      "$orderId": {
+        ".read": "auth != null && (root.child('admins/' + auth.uid).val() == true || data.child('customerId').val() == auth.uid || (data.child('merchantId').val() == auth.uid && (root.child('users/' + auth.uid + '/status').val() == 'activo' || root.child('users/' + auth.uid + '/status').val() == 'active')) || data.child('delivery/courierId').val() == auth.uid || root.child('orders/' + data.child('deliveryOrderId').val() + '/repartidorId').val() == auth.uid)",
+        ".write": "auth != null && (root.child('admins/' + auth.uid).val() == true || (!data.exists() && newData.child('customerId').val() == auth.uid && (root.child('merchants/' + newData.child('merchantId').val() + '/status').val() == 'activo' || root.child('merchants/' + newData.child('merchantId').val() + '/status').val() == 'active') && root.child('merchants/' + newData.child('merchantId').val() + '/isVerified').val() != false && newData.child('delivery/address').isString() && newData.child('delivery/customerLocation/lat').isNumber() && newData.child('delivery/customerLocation/lng').isNumber() && newData.child('delivery/merchantLocation/lat').isNumber() && newData.child('delivery/merchantLocation/lng').isNumber() && newData.child('deliveryFee').isNumber()) || (data.exists() && data.child('merchantId').val() == auth.uid && (root.child('users/' + auth.uid + '/status').val() == 'activo' || root.child('users/' + auth.uid + '/status').val() == 'active')) || (data.exists() && (data.child('delivery/courierId').val() == auth.uid || root.child('orders/' + data.child('deliveryOrderId').val() + '/repartidorId').val() == auth.uid)))"
+      },
+      ".indexOn": ["customerId", "merchantId", "orderStatus", "delivery/courierId", "deliveryOrderId"]
+    },
+    "marketplaceFees": {
+      "$feeId": {
+        ".read": "auth != null && root.child('admins/' + auth.uid).val() == true",
+        ".write": "auth != null && (root.child('admins/' + auth.uid).val() == true || newData.child('customerId').val() == auth.uid)"
+      }
+    },
+    "marketplaceOrderStatusLog": {
+      "$orderId": {
+        ".read": "auth != null && (root.child('admins/' + auth.uid).val() == true || root.child('marketplaceOrders/' + $orderId + '/customerId').val() == auth.uid || root.child('marketplaceOrders/' + $orderId + '/merchantId').val() == auth.uid || root.child('marketplaceOrders/' + $orderId + '/delivery/courierId').val() == auth.uid || root.child('orders/' + root.child('marketplaceOrders/' + $orderId + '/deliveryOrderId').val() + '/repartidorId').val() == auth.uid)",
+        "$logId": {
+          ".write": "auth != null && (root.child('admins/' + auth.uid).val() == true || root.child('marketplaceOrders/' + $orderId + '/merchantId').val() == auth.uid || root.child('marketplaceOrders/' + $orderId + '/delivery/courierId').val() == auth.uid || root.child('orders/' + root.child('marketplaceOrders/' + $orderId + '/deliveryOrderId').val() + '/repartidorId').val() == auth.uid)"
+        }
+      }
+    },
     "publicTracking": {
       ".read": true,
       ".write": "auth != null"
     },
     "wallets": {
+      ".read": "auth != null && root.child('admins/' + auth.uid).val() == true",
       "$uid": {
-        ".read": "auth != null && auth.uid == $uid",
-        ".write": "auth != null && auth.uid == $uid"
+        ".read": "auth != null && (auth.uid == $uid || root.child('admins/' + auth.uid).val() == true)",
+        ".write": "auth != null && (auth.uid == $uid || root.child('admins/' + auth.uid).val() == true)"
       }
     },
     "walletTx": {
+      ".read": "auth != null && root.child('admins/' + auth.uid).val() == true",
       "$uid": {
-        ".read": "auth != null && auth.uid == $uid",
-        ".write": "auth != null && auth.uid == $uid"
+        ".read": "auth != null && (auth.uid == $uid || root.child('admins/' + auth.uid).val() == true)",
+        ".write": "auth != null && (auth.uid == $uid || root.child('admins/' + auth.uid).val() == true)"
       }
     },
     "walletWithdrawals": {
       "$uid": {
-        ".read": "auth != null && auth.uid == $uid",
-        ".write": "auth != null && auth.uid == $uid"
+        ".read": "auth != null && (auth.uid == $uid || root.child('admins/' + auth.uid).val() == true)",
+        ".write": "auth != null && (auth.uid == $uid || root.child('admins/' + auth.uid).val() == true)"
       }
     }
   }

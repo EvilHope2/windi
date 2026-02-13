@@ -12,7 +12,10 @@ const {
   FIREBASE_DB_URL,
   FIREBASE_SERVICE_ACCOUNT,
   BACKEND_BASE_URL,
-  MP_CHECKOUT_MODE
+  MP_CHECKOUT_MODE,
+  FRONTEND_BASE_URL,
+  MAPBOX_PUBLIC_TOKEN,
+  MAPBOX_TOKEN
 } = process.env;
 
 if (!MP_ACCESS_TOKEN || !FIREBASE_DB_URL || !FIREBASE_SERVICE_ACCOUNT) {
@@ -32,12 +35,44 @@ if (serviceAccount) {
 
 const mpClient = MP_ACCESS_TOKEN ? new MercadoPagoConfig({ accessToken: MP_ACCESS_TOKEN }) : null;
 const mpPayment = mpClient ? new Payment(mpClient) : null;
+const DELIVERY_BASE_FEE = Number(process.env.DELIVERY_BASE_FEE || 1500);
+const DELIVERY_PER_KM = Number(process.env.DELIVERY_PER_KM || 500);
+
+app.get('/public-config', (req, res) => {
+  // Public token used by the frontend (Mapbox "pk.*"). Served from env to avoid committing it to git.
+  return res.json({
+    mapboxToken: String(MAPBOX_PUBLIC_TOKEN || MAPBOX_TOKEN || '').trim()
+  });
+});
 
 async function verifyFirebaseToken(req) {
   const authHeader = req.headers.authorization || '';
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
   if (!token) throw new Error('Unauthorized');
   return admin.auth().verifyIdToken(token);
+}
+
+function haversineKm(a, b) {
+  const toRad = (v) => (Number(v) * Math.PI) / 180;
+  const lat1 = toRad(a.lat);
+  const lat2 = toRad(b.lat);
+  const dLat = lat2 - lat1;
+  const dLng = toRad(b.lng - a.lng);
+  const x = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+  const c = 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
+  return 6371 * c;
+}
+
+function haversineMeters(a, b) {
+  return haversineKm(a, b) * 1000;
+}
+
+function parseCoords(raw) {
+  if (!raw) return null;
+  const lat = Number(raw.lat);
+  const lng = Number(raw.lng);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  return { lat, lng };
 }
 
 app.post('/create-shipping-payment', async (req, res) => {
@@ -130,6 +165,259 @@ app.post('/create-shipping-payment', async (req, res) => {
   }
 });
 
+app.post('/create-marketplace-payment', async (req, res) => {
+  try {
+    const decoded = await verifyFirebaseToken(req);
+    const { marketplaceOrderId, paymentMethod } = req.body || {};
+    if (!marketplaceOrderId) return res.status(400).json({ error: 'marketplaceOrderId requerido' });
+    if (!mpClient) return res.status(500).json({ error: 'MercadoPago no configurado' });
+
+    const orderSnap = await admin.database().ref(`marketplaceOrders/${marketplaceOrderId}`).get();
+    if (!orderSnap.exists()) return res.status(404).json({ error: 'Pedido marketplace no encontrado' });
+    const order = orderSnap.val() || {};
+    if (order.customerId !== decoded.uid) return res.status(403).json({ error: 'No autorizado' });
+
+    const customerLoc = order?.delivery?.customerLocation || null;
+    const merchantLoc = order?.delivery?.merchantLocation || null;
+    if (!customerLoc || !merchantLoc) {
+      return res.status(400).json({ error: 'Direccion invalida: faltan coordenadas internas.' });
+    }
+    const customerLat = Number(customerLoc.lat);
+    const customerLng = Number(customerLoc.lng);
+    const merchantLat = Number(merchantLoc.lat);
+    const merchantLng = Number(merchantLoc.lng);
+    if (![customerLat, customerLng, merchantLat, merchantLng].every(Number.isFinite)) {
+      return res.status(400).json({ error: 'Direccion invalida: coordenadas incorrectas.' });
+    }
+
+    const distanceKm = Math.round((haversineKm({ lat: merchantLat, lng: merchantLng }, { lat: customerLat, lng: customerLng }) * 1.25) * 10) / 10;
+    const deliveryFee = Math.round(DELIVERY_BASE_FEE + distanceKm * DELIVERY_PER_KM);
+    const subtotalProducts = Number(order.subtotalProducts || 0);
+    const total = Math.round(subtotalProducts + deliveryFee);
+    if (total <= 0) return res.status(400).json({ error: 'Monto invalido' });
+
+    await admin.database().ref(`marketplaceOrders/${marketplaceOrderId}`).update({
+      deliveryFee,
+      total,
+      updatedAt: Date.now(),
+      delivery: {
+        ...(order.delivery || {}),
+        distanceKm
+      }
+    });
+
+    const amount = total;
+    if (amount <= 0) return res.status(400).json({ error: 'Monto invalido' });
+
+    const orderUrl = `${FRONTEND_BASE_URL || 'https://windi-rg-121f8.web.app'}/orders/${encodeURIComponent(marketplaceOrderId)}`;
+    const checkoutPaymentMethod = paymentMethod || order.paymentMethod || 'mp_card';
+    const paymentMethods =
+      checkoutPaymentMethod === 'mp_cash'
+        ? {
+            installments: 1,
+            excluded_payment_types: [
+              { id: 'credit_card' },
+              { id: 'debit_card' },
+              { id: 'prepaid_card' }
+            ]
+          }
+        : checkoutPaymentMethod === 'mp_card'
+          ? {
+              excluded_payment_types: [
+                { id: 'ticket' },
+                { id: 'atm' }
+              ]
+            }
+          : undefined;
+
+    const preference = new Preference(mpClient);
+    const result = await preference.create({
+      body: {
+        items: [
+          {
+            title: `Pedido Windi #${marketplaceOrderId}`,
+            quantity: 1,
+            currency_id: 'ARS',
+            unit_price: amount
+          }
+        ],
+        metadata: {
+          marketplaceOrderId,
+          paymentMethod: checkoutPaymentMethod
+        },
+        payment_methods: paymentMethods,
+        back_urls: {
+          success: orderUrl,
+          failure: orderUrl,
+          pending: orderUrl
+        },
+        auto_return: 'approved',
+        notification_url: BACKEND_BASE_URL ? `${BACKEND_BASE_URL}/mp/webhook` : undefined
+      }
+    });
+
+    const initPoint = result && result.init_point;
+    const sandboxInitPoint = result && result.sandbox_init_point;
+    const forcedMode = (MP_CHECKOUT_MODE || 'auto').toLowerCase();
+    const inferredMode = String(MP_ACCESS_TOKEN || '').startsWith('TEST-') ? 'sandbox' : 'live';
+    const checkoutMode = forcedMode === 'live' || forcedMode === 'sandbox' ? forcedMode : inferredMode;
+    const checkoutUrl = checkoutMode === 'sandbox'
+      ? (sandboxInitPoint || initPoint)
+      : (initPoint || sandboxInitPoint);
+    if (!checkoutUrl) return res.status(500).json({ error: 'No se pudo crear el pago' });
+
+    await admin.database().ref(`marketplaceOrders/${marketplaceOrderId}`).update({
+      mpInitPoint: initPoint || null,
+      mpSandboxInitPoint: sandboxInitPoint || null,
+      mpCheckoutUrl: checkoutUrl,
+      paymentStatus: 'pending',
+      mpStatus: 'pending',
+      updatedAt: Date.now()
+    });
+
+    return res.json({
+      init_point: initPoint || null,
+      sandbox_init_point: sandboxInitPoint || null,
+      checkout_url: checkoutUrl
+    });
+  } catch (err) {
+    const msg = err.message || 'Error creando pago marketplace';
+    const code = msg === 'Unauthorized' ? 401 : 500;
+    return res.status(code).json({ error: msg });
+  }
+});
+
+app.post('/courier/orders/:orderId/deliver', async (req, res) => {
+  try {
+    const decoded = await verifyFirebaseToken(req);
+    const { orderId } = req.params;
+    const lat = Number(req.body?.lat);
+    const lng = Number(req.body?.lng);
+    const accuracy = Number(req.body?.accuracy);
+    const gpsTimestamp = Number(req.body?.timestamp || Date.now());
+    if (!orderId) return res.status(400).json({ error: 'orderId requerido' });
+    if (![lat, lng, accuracy, gpsTimestamp].every(Number.isFinite)) {
+      return res.status(400).json({ error: 'Ubicacion invalida.' });
+    }
+    if (accuracy > 50) {
+      return res.status(400).json({ error: `Precision GPS insuficiente (${Math.round(accuracy)} m).` });
+    }
+
+    const orderRef = admin.database().ref(`orders/${orderId}`);
+    const orderSnap = await orderRef.get();
+    if (!orderSnap.exists()) return res.status(404).json({ error: 'Pedido no encontrado' });
+    const order = orderSnap.val() || {};
+    if (order.repartidorId !== decoded.uid) return res.status(403).json({ error: 'No autorizado' });
+    if (order.estado !== 'en-camino' && order.estado !== 'entregado') {
+      return res.status(400).json({ error: 'El pedido no esta en estado en-camino.' });
+    }
+    if (order.estado === 'entregado') {
+      return res.json({ ok: true, alreadyDelivered: true });
+    }
+
+    let destination = parseCoords(order.destinoGeo);
+    let marketplaceOrder = null;
+    if (!destination && order.marketplaceOrderId) {
+      const mpSnap = await admin.database().ref(`marketplaceOrders/${order.marketplaceOrderId}`).get();
+      if (mpSnap.exists()) {
+        marketplaceOrder = mpSnap.val() || {};
+        destination = parseCoords(marketplaceOrder?.delivery?.customerLocation);
+      }
+    }
+    if (!destination) return res.status(400).json({ error: 'Pedido sin coordenadas de destino.' });
+
+    const courierLocation = { lat, lng };
+    const distanceMeters = haversineMeters(courierLocation, destination);
+    if (distanceMeters > 50) {
+      return res.status(400).json({
+        error: `Acercate al destino para confirmar la entrega (a ${Math.round(distanceMeters)} m).`,
+        distanceMeters: Math.round(distanceMeters)
+      });
+    }
+
+    const now = Date.now();
+    const walletRef = admin.database().ref(`wallets/${decoded.uid}`);
+    const walletSnap = await walletRef.get();
+    const wallet = walletSnap.val() || {
+      balance: 0,
+      pending: 0,
+      totalEarned: 0,
+      totalCommissions: 0,
+      totalWithdrawn: 0,
+      currency: 'ARS',
+      createdAt: now,
+      updatedAt: now
+    };
+
+    if (!order.payoutApplied) {
+      if (order.pagoMetodo === 'cash_delivery') {
+        const comision = Number(order.comision || 0);
+        const newBalance = Number(wallet.balance || 0) - comision;
+        const totalCommissions = Number(wallet.totalCommissions || 0) + Math.abs(comision);
+        await walletRef.update({ balance: newBalance, totalCommissions, updatedAt: now });
+        await admin.database().ref(`walletTx/${decoded.uid}`).push({
+          type: 'commission',
+          amount: -comision,
+          createdAt: now,
+          orderId
+        });
+      } else {
+        const payout = Number(order.payout ?? order.precio ?? 0);
+        const newBalance = Number(wallet.balance || 0) + payout;
+        const totalEarned = Number(wallet.totalEarned || 0) + payout;
+        await walletRef.update({ balance: newBalance, totalEarned, updatedAt: now });
+        await admin.database().ref(`walletTx/${decoded.uid}`).push({
+          type: 'credit',
+          amount: payout,
+          createdAt: now,
+          orderId
+        });
+      }
+    }
+
+    await orderRef.update({
+      estado: 'entregado',
+      entregadoAt: now,
+      updatedAt: now,
+      payoutApplied: true,
+      deliveryProof: {
+        location: { lat, lng },
+        accuracy,
+        timestamp: gpsTimestamp,
+        validatedAt: now,
+        distanceMeters: Math.round(distanceMeters)
+      }
+    });
+
+    if (order.marketplaceOrderId) {
+      const mpRef = admin.database().ref(`marketplaceOrders/${order.marketplaceOrderId}`);
+      await mpRef.update({
+        orderStatus: 'delivered',
+        updatedAt: now
+      });
+      await admin.database().ref(`marketplaceOrderStatusLog/${order.marketplaceOrderId}`).push({
+        status: 'delivered',
+        actorId: decoded.uid,
+        actorRole: 'courier',
+        createdAt: now
+      });
+    }
+
+    if (order.trackingToken) {
+      await admin.database().ref(`publicTracking/${order.trackingToken}`).update({
+        estado: 'entregado',
+        updatedAt: now
+      });
+    }
+
+    return res.json({ ok: true, distanceMeters: Math.round(distanceMeters), deliveredAt: now });
+  } catch (err) {
+    const msg = err.message || 'Error validando entrega';
+    const code = msg === 'Unauthorized' ? 401 : 500;
+    return res.status(code).json({ error: msg });
+  }
+});
+
 app.post('/mp/webhook', async (req, res) => {
   try {
     if (!mpPayment) return res.status(500).send('MP not configured');
@@ -144,12 +432,22 @@ app.post('/mp/webhook', async (req, res) => {
     const payment = await mpPayment.get({ id: paymentId });
     const status = payment?.status;
     const orderId = payment?.metadata?.orderId;
+    const marketplaceOrderId = payment?.metadata?.marketplaceOrderId;
 
     if (orderId && status) {
       await admin.database().ref(`orders/${orderId}`).update({
         mpStatus: status,
         mpPaymentId: paymentId,
         mpPaidAt: status === 'approved' ? Date.now() : null
+      });
+    }
+    if (marketplaceOrderId && status) {
+      await admin.database().ref(`marketplaceOrders/${marketplaceOrderId}`).update({
+        mpStatus: status,
+        paymentStatus: status === 'approved' ? 'paid' : status,
+        mpPaymentId: paymentId,
+        mpPaidAt: status === 'approved' ? Date.now() : null,
+        updatedAt: Date.now()
       });
     }
 
