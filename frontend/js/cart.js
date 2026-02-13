@@ -14,24 +14,41 @@ function render() {
   merchantInfo.textContent = cart.merchantId ? `Comercio: ${cart.merchantName || cart.merchantId}` : 'Sin comercio seleccionado.';
 
   if (!cart.items.length) {
-    cartList.innerHTML = '<div class="item"><div class="muted">Carrito vacio.</div></div>';
+    cartList.innerHTML = `
+      <div class="empty-state">
+        <strong>Tu carrito esta vacio</strong>
+        <div class="muted">Explora comercios y agrega productos para continuar.</div>
+        <a class="primary-cta" href="/marketplace">Explorar marketplace</a>
+      </div>
+    `;
     totals.textContent = '';
     return;
   }
 
   cart.items.forEach((item) => {
     const div = document.createElement('div');
-    div.className = 'item';
+    div.className = 'list-card';
+    const lineTotal = Number(item.unitPriceSnapshot || 0) * Number(item.qty || 0);
     div.innerHTML = `
-      <div class="row">
-        <strong>${item.nameSnapshot || 'Producto'}</strong>
-        <span>${fmtMoney((item.unitPriceSnapshot || 0) * (item.qty || 0))}</span>
-      </div>
-      <div class="row">
-        <button data-op="dec" class="secondary">-</button>
-        <span style="text-align:center;">${item.qty}</span>
-        <button data-op="inc" class="secondary">+</button>
-        <button data-op="del" class="danger">Quitar</button>
+      <div class="cart-row">
+        <div>
+          <div class="list-card-head">
+            <div>
+              <div class="list-card-title">${item.nameSnapshot || 'Producto'}</div>
+              <div class="list-card-sub">${fmtMoney(item.unitPriceSnapshot || 0)} c/u</div>
+            </div>
+            <span class="status-pill info dot">En carrito</span>
+          </div>
+        </div>
+        <div class="right">
+          <div class="cart-price">${fmtMoney(lineTotal)}</div>
+          <div class="qty-stepper" aria-label="Cantidad">
+            <button data-op="dec" class="secondary" type="button" aria-label="Restar">-</button>
+            <span>${item.qty}</span>
+            <button data-op="inc" class="secondary" type="button" aria-label="Sumar">+</button>
+          </div>
+          <button data-op="del" class="danger" type="button" style="width:auto; padding:8px 10px; font-size:12px;">Quitar</button>
+        </div>
       </div>
     `;
     div.querySelector('[data-op="dec"]').addEventListener('click', () => updateQty(item.productId, -1));

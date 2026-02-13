@@ -37,6 +37,64 @@ const mpClient = MP_ACCESS_TOKEN ? new MercadoPagoConfig({ accessToken: MP_ACCES
 const mpPayment = mpClient ? new Payment(mpClient) : null;
 const DELIVERY_BASE_FEE = Number(process.env.DELIVERY_BASE_FEE || 1500);
 const DELIVERY_PER_KM = Number(process.env.DELIVERY_PER_KM || 500);
+const DEFAULT_DELIVER_RADIUS_METERS = Number(process.env.DELIVERY_RADIUS_METERS || 50);
+const DEFAULT_DELIVER_MAX_ACCURACY_METERS = Number(process.env.DELIVERY_MAX_ACCURACY_METERS || 50);
+
+let cachedGlobalConfig = { value: null, fetchedAt: 0 };
+
+async function getGlobalConfig() {
+  const now = Date.now();
+  if (cachedGlobalConfig.value && now - cachedGlobalConfig.fetchedAt < 60_000) return cachedGlobalConfig.value;
+  try {
+    const snap = await admin.database().ref('config/global').get();
+    const cfg = snap.exists() ? (snap.val() || {}) : {};
+    const normalized = {
+      deliveryBaseFee: Number.isFinite(Number(cfg.deliveryBaseFee)) ? Number(cfg.deliveryBaseFee) : DELIVERY_BASE_FEE,
+      deliveryPerKm: Number.isFinite(Number(cfg.deliveryPerKm)) ? Number(cfg.deliveryPerKm) : DELIVERY_PER_KM,
+      deliverRadiusMeters: Number.isFinite(Number(cfg.deliverRadiusMeters)) ? Number(cfg.deliverRadiusMeters) : DEFAULT_DELIVER_RADIUS_METERS,
+      deliverMaxAccuracyMeters: Number.isFinite(Number(cfg.deliverMaxAccuracyMeters)) ? Number(cfg.deliverMaxAccuracyMeters) : DEFAULT_DELIVER_MAX_ACCURACY_METERS,
+      commissionRate: Number.isFinite(Number(cfg.commissionRate)) ? Number(cfg.commissionRate) : 0.05,
+      commissionBase: (cfg.commissionBase === 'total' ? 'total' : 'subtotal_products'),
+      courierCommissionRate: Number.isFinite(Number(cfg.courierCommissionRate)) ? Number(cfg.courierCommissionRate) : 0.15
+    };
+    cachedGlobalConfig = { value: normalized, fetchedAt: now };
+    return normalized;
+  } catch {
+    const fallback = {
+      deliveryBaseFee: DELIVERY_BASE_FEE,
+      deliveryPerKm: DELIVERY_PER_KM,
+      deliverRadiusMeters: DEFAULT_DELIVER_RADIUS_METERS,
+      deliverMaxAccuracyMeters: DEFAULT_DELIVER_MAX_ACCURACY_METERS,
+      commissionRate: 0.05,
+      commissionBase: 'subtotal_products',
+      courierCommissionRate: 0.15
+    };
+    cachedGlobalConfig = { value: fallback, fetchedAt: now };
+    return fallback;
+  }
+}
+
+async function requireAdmin(decoded) {
+  const uid = decoded?.uid;
+  if (!uid) throw new Error('Unauthorized');
+  const snap = await admin.database().ref(`admins/${uid}`).get();
+  if (snap.val() !== true) {
+    const err = new Error('Forbidden');
+    err.code = 403;
+    throw err;
+  }
+  return true;
+}
+
+async function adminLog(actorUid, action, payload) {
+  const now = Date.now();
+  await admin.database().ref('adminLogs').push({
+    actorUid,
+    action,
+    payload: payload || null,
+    createdAt: now
+  });
+}
 
 app.get('/public-config', (req, res) => {
   // Public token used by the frontend (Mapbox "pk.*"). Served from env to avoid committing it to git.
@@ -190,8 +248,9 @@ app.post('/create-marketplace-payment', async (req, res) => {
       return res.status(400).json({ error: 'Direccion invalida: coordenadas incorrectas.' });
     }
 
+    const globalCfg = await getGlobalConfig();
     const distanceKm = Math.round((haversineKm({ lat: merchantLat, lng: merchantLng }, { lat: customerLat, lng: customerLng }) * 1.25) * 10) / 10;
-    const deliveryFee = Math.round(DELIVERY_BASE_FEE + distanceKm * DELIVERY_PER_KM);
+    const deliveryFee = Math.round(globalCfg.deliveryBaseFee + distanceKm * globalCfg.deliveryPerKm);
     const subtotalProducts = Number(order.subtotalProducts || 0);
     const total = Math.round(subtotalProducts + deliveryFee);
     if (total <= 0) return res.status(400).json({ error: 'Monto invalido' });
@@ -290,6 +349,7 @@ app.post('/create-marketplace-payment', async (req, res) => {
 app.post('/courier/orders/:orderId/deliver', async (req, res) => {
   try {
     const decoded = await verifyFirebaseToken(req);
+    const globalCfg = await getGlobalConfig();
     const { orderId } = req.params;
     const lat = Number(req.body?.lat);
     const lng = Number(req.body?.lng);
@@ -299,7 +359,7 @@ app.post('/courier/orders/:orderId/deliver', async (req, res) => {
     if (![lat, lng, accuracy, gpsTimestamp].every(Number.isFinite)) {
       return res.status(400).json({ error: 'Ubicacion invalida.' });
     }
-    if (accuracy > 50) {
+    if (accuracy > globalCfg.deliverMaxAccuracyMeters) {
       return res.status(400).json({ error: `Precision GPS insuficiente (${Math.round(accuracy)} m).` });
     }
 
@@ -328,7 +388,7 @@ app.post('/courier/orders/:orderId/deliver', async (req, res) => {
 
     const courierLocation = { lat, lng };
     const distanceMeters = haversineMeters(courierLocation, destination);
-    if (distanceMeters > 50) {
+    if (distanceMeters > globalCfg.deliverRadiusMeters) {
       return res.status(400).json({
         error: `Acercate al destino para confirmar la entrega (a ${Math.round(distanceMeters)} m).`,
         distanceMeters: Math.round(distanceMeters)
@@ -350,8 +410,18 @@ app.post('/courier/orders/:orderId/deliver', async (req, res) => {
     };
 
     if (!order.payoutApplied) {
-      if (order.pagoMetodo === 'cash_delivery') {
-        const comision = Number(order.comision || 0);
+      const paymentType = String(order.pagoMetodo || '').toLowerCase();
+      const collectsFromCustomer = paymentType === 'cash_delivery' || paymentType === 'transfer_delivery';
+      const deliveryFee = Number(order.precio || 0);
+      const courierCommission = Number.isFinite(Number(order.deliveryCommissionAmount))
+        ? Number(order.deliveryCommissionAmount)
+        : (Number.isFinite(Number(order.comision)) ? Number(order.comision) : Math.round(deliveryFee * Number(globalCfg.courierCommissionRate || 0)));
+      const courierPayout = Number.isFinite(Number(order.payout))
+        ? Number(order.payout)
+        : Math.round(deliveryFee - courierCommission);
+
+      if (collectsFromCustomer) {
+        const comision = courierCommission;
         const newBalance = Number(wallet.balance || 0) - comision;
         const totalCommissions = Number(wallet.totalCommissions || 0) + Math.abs(comision);
         await walletRef.update({ balance: newBalance, totalCommissions, updatedAt: now });
@@ -362,7 +432,7 @@ app.post('/courier/orders/:orderId/deliver', async (req, res) => {
           orderId
         });
       } else {
-        const payout = Number(order.payout ?? order.precio ?? 0);
+        const payout = courierPayout;
         const newBalance = Number(wallet.balance || 0) + payout;
         const totalEarned = Number(wallet.totalEarned || 0) + payout;
         await walletRef.update({ balance: newBalance, totalEarned, updatedAt: now });
@@ -418,12 +488,251 @@ app.post('/courier/orders/:orderId/deliver', async (req, res) => {
   }
 });
 
+// Admin API (RBAC enforced in backend)
+app.get('/admin/config/global', async (req, res) => {
+  try {
+    const decoded = await verifyFirebaseToken(req);
+    await requireAdmin(decoded);
+    const cfg = await getGlobalConfig();
+    return res.json({ ok: true, config: cfg });
+  } catch (err) {
+    const msg = err.message || 'Error';
+    const code = err.code || (msg === 'Unauthorized' ? 401 : 500);
+    return res.status(code).json({ error: msg });
+  }
+});
+
+app.post('/admin/config/global', async (req, res) => {
+  try {
+    const decoded = await verifyFirebaseToken(req);
+    await requireAdmin(decoded);
+    const body = req.body || {};
+    const patch = {
+      deliveryBaseFee: Number.isFinite(Number(body.deliveryBaseFee)) ? Number(body.deliveryBaseFee) : undefined,
+      deliveryPerKm: Number.isFinite(Number(body.deliveryPerKm)) ? Number(body.deliveryPerKm) : undefined,
+      deliverRadiusMeters: Number.isFinite(Number(body.deliverRadiusMeters)) ? Number(body.deliverRadiusMeters) : undefined,
+      deliverMaxAccuracyMeters: Number.isFinite(Number(body.deliverMaxAccuracyMeters)) ? Number(body.deliverMaxAccuracyMeters) : undefined,
+      commissionRate: Number.isFinite(Number(body.commissionRate)) ? Number(body.commissionRate) : undefined,
+      commissionBase: body.commissionBase === 'total' ? 'total' : 'subtotal_products',
+      courierCommissionRate: Number.isFinite(Number(body.courierCommissionRate)) ? Number(body.courierCommissionRate) : undefined,
+      updatedAt: Date.now(),
+      updatedBy: decoded.uid
+    };
+    Object.keys(patch).forEach((k) => patch[k] === undefined && delete patch[k]);
+    await admin.database().ref('config/global').update(patch);
+    cachedGlobalConfig = { value: null, fetchedAt: 0 };
+    await adminLog(decoded.uid, 'config_global_update', patch);
+    return res.json({ ok: true });
+  } catch (err) {
+    const msg = err.message || 'Error';
+    const code = err.code || (msg === 'Unauthorized' ? 401 : 500);
+    return res.status(code).json({ error: msg });
+  }
+});
+
+app.get('/admin/summary', async (req, res) => {
+  try {
+    const decoded = await verifyFirebaseToken(req);
+    await requireAdmin(decoded);
+    const now = Date.now();
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+    const dayStart = startOfDay.getTime();
+
+    const [mpOrdersSnap, ordersSnap, merchantsSnap, usersSnap, feesSnap] = await Promise.all([
+      admin.database().ref('marketplaceOrders').get(),
+      admin.database().ref('orders').get(),
+      admin.database().ref('merchants').get(),
+      admin.database().ref('users').get(),
+      admin.database().ref('marketplaceFees').get()
+    ]);
+
+    const mpOrders = mpOrdersSnap.val() || {};
+    const orders = ordersSnap.val() || {};
+    const merchants = merchantsSnap.val() || {};
+    const users = usersSnap.val() || {};
+    const fees = feesSnap.val() || {};
+
+    const mpEntriesToday = Object.values(mpOrders).filter((o) => Number(o.createdAt || 0) >= dayStart);
+    const deliveriesToday = Object.values(orders).filter((o) => Number(o.createdAt || 0) >= dayStart);
+    const inCourse = mpEntriesToday.filter((o) => !['delivered', 'cancelled'].includes(String(o.orderStatus || 'created')));
+    const delivered = mpEntriesToday.filter((o) => String(o.orderStatus) === 'delivered');
+    const pendingMerchants = Object.values(merchants).filter((m) => ['pendiente', 'pending'].includes(String(m.status || '').toLowerCase()));
+
+    const couriers = Object.values(users).filter((u) => String(u.role || '').toLowerCase() === 'repartidor');
+    const couriersOnline = couriers.filter((u) => u && u.uid && false);
+    // presence is handled in frontend; backend summary computes online from courierPresence
+    const presenceSnap = await admin.database().ref('courierPresence').get();
+    const presence = presenceSnap.val() || {};
+    const onlineCount = Object.values(presence).filter((p) => Number(p.updatedAt || 0) >= (now - 2 * 60_000)).length;
+
+    const feesToday = Object.values(fees).filter((f) => Number(f.createdAt || 0) >= dayStart);
+    const commissionToday = feesToday.reduce((acc, f) => acc + Number(f.commissionAmount || 0), 0);
+
+    return res.json({
+      ok: true,
+      kpis: {
+        pedidosHoy: mpEntriesToday.length,
+        enviosHoy: deliveriesToday.length,
+        pedidosEnCurso: inCourse.length,
+        pedidosEntregados: delivered.length,
+        comerciosPendientes: pendingMerchants.length,
+        repartidoresOnline: onlineCount,
+        comisionHoy: Math.round(commissionToday)
+      }
+    });
+  } catch (err) {
+    const msg = err.message || 'Error';
+    const code = err.code || (msg === 'Unauthorized' ? 401 : 500);
+    return res.status(code).json({ error: msg });
+  }
+});
+
+app.post('/admin/merchants/:uid/approve', async (req, res) => {
+  try {
+    const decoded = await verifyFirebaseToken(req);
+    await requireAdmin(decoded);
+    const uid = req.params.uid;
+    const now = Date.now();
+    await admin.database().ref(`users/${uid}`).update({ status: 'activo', validationUpdatedAt: now });
+    await admin.database().ref(`merchants/${uid}`).update({ status: 'activo', isVerified: true, updatedAt: now });
+    await adminLog(decoded.uid, 'merchant_approve', { uid });
+    return res.json({ ok: true });
+  } catch (err) {
+    const msg = err.message || 'Error';
+    const code = err.code || (msg === 'Unauthorized' ? 401 : 500);
+    return res.status(code).json({ error: msg });
+  }
+});
+
+app.post('/admin/merchants/:uid/reject', async (req, res) => {
+  try {
+    const decoded = await verifyFirebaseToken(req);
+    await requireAdmin(decoded);
+    const uid = req.params.uid;
+    const reason = String(req.body?.reason || '').trim() || null;
+    const now = Date.now();
+    await admin.database().ref(`users/${uid}`).update({ status: 'rechazado', rejectionReason: reason, validationUpdatedAt: now });
+    await admin.database().ref(`merchants/${uid}`).update({ status: 'rechazado', isVerified: false, rejectionReason: reason, updatedAt: now });
+    await adminLog(decoded.uid, 'merchant_reject', { uid, reason });
+    return res.json({ ok: true });
+  } catch (err) {
+    const msg = err.message || 'Error';
+    const code = err.code || (msg === 'Unauthorized' ? 401 : 500);
+    return res.status(code).json({ error: msg });
+  }
+});
+
+app.post('/admin/merchants/:uid/suspend', async (req, res) => {
+  try {
+    const decoded = await verifyFirebaseToken(req);
+    await requireAdmin(decoded);
+    const uid = req.params.uid;
+    const reason = String(req.body?.reason || '').trim() || null;
+    const now = Date.now();
+    await admin.database().ref(`users/${uid}`).update({ status: 'suspendido', suspensionReason: reason, validationUpdatedAt: now });
+    await admin.database().ref(`merchants/${uid}`).update({ status: 'suspendido', isVerified: false, suspensionReason: reason, updatedAt: now });
+    await adminLog(decoded.uid, 'merchant_suspend', { uid, reason });
+    return res.json({ ok: true });
+  } catch (err) {
+    const msg = err.message || 'Error';
+    const code = err.code || (msg === 'Unauthorized' ? 401 : 500);
+    return res.status(code).json({ error: msg });
+  }
+});
+
+app.post('/admin/orders/:marketplaceOrderId/status', async (req, res) => {
+  try {
+    const decoded = await verifyFirebaseToken(req);
+    await requireAdmin(decoded);
+    const marketplaceOrderId = req.params.marketplaceOrderId;
+    const status = String(req.body?.status || '').trim();
+    const reason = String(req.body?.reason || '').trim() || null;
+    if (!status) return res.status(400).json({ error: 'status requerido' });
+    const now = Date.now();
+    await admin.database().ref(`marketplaceOrders/${marketplaceOrderId}`).update({ orderStatus: status, updatedAt: now });
+    await admin.database().ref(`marketplaceOrderStatusLog/${marketplaceOrderId}`).push({
+      status,
+      actorId: decoded.uid,
+      actorRole: 'admin',
+      reason,
+      createdAt: now
+    });
+    await adminLog(decoded.uid, 'order_status_change', { marketplaceOrderId, status, reason });
+    return res.json({ ok: true });
+  } catch (err) {
+    const msg = err.message || 'Error';
+    const code = err.code || (msg === 'Unauthorized' ? 401 : 500);
+    return res.status(code).json({ error: msg });
+  }
+});
+
+app.post('/admin/dispatch/assign', async (req, res) => {
+  try {
+    const decoded = await verifyFirebaseToken(req);
+    await requireAdmin(decoded);
+    const marketplaceOrderId = String(req.body?.marketplaceOrderId || '').trim();
+    const deliveryOrderId = String(req.body?.deliveryOrderId || '').trim();
+    const courierId = String(req.body?.courierId || '').trim();
+    if (!courierId) return res.status(400).json({ error: 'courierId requerido' });
+
+    let mpId = marketplaceOrderId;
+    let delId = deliveryOrderId;
+    if (!mpId && delId) {
+      const delSnap = await admin.database().ref(`orders/${delId}`).get();
+      const del = delSnap.val() || {};
+      mpId = del.marketplaceOrderId || '';
+    }
+    if (!delId && mpId) {
+      const mpSnap = await admin.database().ref(`marketplaceOrders/${mpId}`).get();
+      const mp = mpSnap.val() || {};
+      delId = mp.deliveryOrderId || '';
+    }
+    if (!mpId || !delId) return res.status(400).json({ error: 'marketplaceOrderId y/o deliveryOrderId requerido' });
+
+    const now = Date.now();
+    await admin.database().ref(`orders/${delId}`).update({
+      repartidorId: courierId,
+      estado: 'en-camino-retiro',
+      assignedByAdmin: decoded.uid,
+      assignedAt: now,
+      updatedAt: now
+    });
+    await admin.database().ref(`marketplaceOrders/${mpId}`).update({
+      orderStatus: 'assigned',
+      'delivery/courierId': courierId,
+      updatedAt: now
+    });
+    await admin.database().ref(`marketplaceOrderStatusLog/${mpId}`).push({
+      status: 'assigned',
+      actorId: decoded.uid,
+      actorRole: 'admin',
+      createdAt: now
+    });
+    await adminLog(decoded.uid, 'dispatch_assign', { marketplaceOrderId: mpId, deliveryOrderId: delId, courierId });
+    return res.json({ ok: true });
+  } catch (err) {
+    const msg = err.message || 'Error';
+    const code = err.code || (msg === 'Unauthorized' ? 401 : 500);
+    return res.status(code).json({ error: msg });
+  }
+});
+
 app.post('/mp/webhook', async (req, res) => {
   try {
     if (!mpPayment) return res.status(500).send('MP not configured');
 
-    const { type, data } = req.body || {};
-    const paymentId = data && (data.id || data['id']);
+    const body = req.body || {};
+    const query = req.query || {};
+    const type = body.type || body.topic || query.type || query.topic || null;
+    const data = body.data || null;
+    const paymentId =
+      (data && (data.id || data['id'])) ||
+      body.id ||
+      body['data.id'] ||
+      query.id ||
+      query['data.id'] ||
+      null;
 
     if (type !== 'payment' || !paymentId) {
       return res.status(200).send('Ignored');

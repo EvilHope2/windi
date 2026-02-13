@@ -9,14 +9,27 @@
   <link href="https://api.mapbox.com/mapbox-gl-js/v3.5.0/mapbox-gl.css" rel="stylesheet" />
 </head>
 <body>
-  <div class="container">
-    <div class="header">
-      <div class="brand">Repartidor</div>
-      <div class="row" style="max-width:420px;">
-        <a href="/index.html">Inicio</a>
-        <button id="logoutBtn" class="secondary">Salir</button>
+  <div class="app-page">
+    <header class="app-topbar">
+      <div class="app-topbar-inner">
+        <div class="app-title">
+          <div class="app-brand-badge" aria-hidden="true">W</div>
+          <h1>Repartidor</h1>
+        </div>
+        <div class="app-actions">
+          <a class="icon-btn" href="/index.html" aria-label="Inicio">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/>
+            </svg>
+          </a>
+          <button id="logoutBtn" class="icon-btn" type="button" aria-label="Salir">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="M16 17l5-5-5-5"/><path d="M21 12H9"/>
+            </svg>
+          </button>
+        </div>
       </div>
-    </div>
+    </header>
 
       <div id="authSection" class="grid">
       <div class="card">
@@ -96,8 +109,8 @@
           </span>
           <h2>Estado GPS</h2>
         </div>
-        <div id="gpsStateBadge" class="status pending">Buscando señal</div>
-        <div id="gpsInfo" class="muted" style="margin-top:8px;">Esperando permisos de ubicación...</div>
+        <div id="gpsStateBadge" class="status pending">Buscando senal</div>
+        <div id="gpsInfo" class="muted" style="margin-top:8px;">Esperando permisos de ubicacion...</div>
         <div class="row" style="margin-top:10px;">
           <button id="gpsRetryBtn" type="button" class="secondary">Reintentar GPS</button>
         </div>
@@ -116,9 +129,15 @@
         <div id="activoInfo" class="muted">No hay pedido activo.</div>
         <div id="deliveryDistanceInfo" class="muted">Sin destino activo.</div>
         <div id="navEtaInfo" class="muted">Sin ruta activa.</div>
-        <button id="navPickupBtn" class="secondary">Ir a retirar (Google Maps)</button>
+        <div id="mapInfo" class="muted">Acepta un pedido para ver el mapa y la ruta.</div>
+        <div id="map" class="map"></div>
         <button id="markPickedUpBtn">Marcar retirado</button>
-        <button id="navDropoffBtn" class="secondary">Ir a entregar (Google Maps)</button>
+        
+        <div class="quick-actions">
+          <button id="waClientBtn" class="secondary" type="button">WhatsApp cliente</button>
+          <button id="supportBtn" class="secondary" type="button">Soporte</button>
+        </div>
+        <div id="quickActionsHint" class="action-hint">Acciones rapidas: WhatsApp al cliente y soporte.</div>
         <button id="startTrackingBtn" class="secondary">Iniciar tracking</button>
         <button id="stopTrackingBtn" class="danger">Detener tracking</button>
         <button id="deliverBtn">Marcar entregado</button>
@@ -147,8 +166,7 @@
           </span>
           <h2>Mi ubicacion</h2>
         </div>
-        <div id="mapInfo" class="muted">Activa el tracking para ver el mapa.</div>
-        <div id="map" class="map"></div>
+        <div class="muted">El mapa se muestra en el pedido activo.</div>
       </div>
       <div class="card">
         <div class="title-row">
@@ -185,6 +203,12 @@
 
     <div id="status" class="footer"></div>
   </div>
+
+  <button id="supportFab" class="fab-support" type="button" aria-label="Soporte">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M4 12a8 8 0 0 1 16 0"/><path d="M2 12v3a2 2 0 0 0 2 2h1v-7H4a2 2 0 0 0-2 2z"/><path d="M22 12v3a2 2 0 0 1-2 2h-1v-7h1a2 2 0 0 1 2 2z"/><path d="M7 21h10"/>
+    </svg>
+  </button>
 
   <script src="https://api.mapbox.com/mapbox-gl-js/v3.5.0/mapbox-gl.js"></script>
   <script src="/js/sw-register.js"></script>

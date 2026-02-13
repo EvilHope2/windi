@@ -29,8 +29,6 @@ const startTrackingBtn = qs('startTrackingBtn');
 const stopTrackingBtn = qs('stopTrackingBtn');
 const deliverBtn = qs('deliverBtn');
 const cancelBtn = qs('cancelBtn');
-const navPickupBtn = qs('navPickupBtn');
-const navDropoffBtn = qs('navDropoffBtn');
 const markPickedUpBtn = qs('markPickedUpBtn');
 const navEtaInfo = qs('navEtaInfo');
 const logoutBtn = qs('logoutBtn');
@@ -52,6 +50,10 @@ const gpsStateBadge = qs('gpsStateBadge');
 const gpsInfo = qs('gpsInfo');
 const gpsRetryBtn = qs('gpsRetryBtn');
 const deliveryDistanceInfo = qs('deliveryDistanceInfo');
+const waClientBtn = qs('waClientBtn');
+const supportBtn = qs('supportBtn');
+const supportFab = qs('supportFab');
+const quickActionsHint = qs('quickActionsHint');
 
 const BACKEND_BASE_URL = 'https://windi-01ia.onrender.com';
 const DELIVERY_RADIUS_METERS = 50;
@@ -59,9 +61,14 @@ const DELIVERY_MAX_ACCURACY_METERS = 50;
 const TAKE_ORDER_MAX_ACCURACY_METERS = 100;
 
 let map = null;
-let marker = null;
-let routeAdded = false;
-let routeCoords = [];
+let courierMarker = null;
+let pickupMarker = null;
+let dropoffMarker = null;
+let routeSourceReady = false;
+let lastRouteFetchAt = 0;
+let lastRouteKey = '';
+let lastRouteOrigin = null;
+let lastFitKey = '';
 
 let activeOrder = null;
 let watchId = null;
@@ -69,8 +76,79 @@ let profileApproved = false;
 const DEFAULT_CURRENCY = 'ARS';
 let gpsStatus = 'searching';
 let currentPosition = null;
-let lastNavEtaFetchAt = 0;
 let ordersCache = null;
+
+function normalizeArWhatsApp(raw) {
+  const digits = String(raw || '').replace(/\D/g, '');
+  if (!digits) return '';
+  // Best-effort normalization:
+  // - remove leading 0
+  // - ensure country prefix 54
+  const noLeading0 = digits.startsWith('0') ? digits.slice(1) : digits;
+  if (noLeading0.startsWith('54')) return noLeading0;
+  return `54${noLeading0}`;
+}
+
+function getCustomerWhatsapp(order) {
+  return (
+    order?.clienteWhatsapp ||
+    order?.customerWhatsapp ||
+    order?.whatsappCliente ||
+    order?.delivery?.customerWhatsapp ||
+    order?.delivery?.whatsapp ||
+    order?.whatsapp ||
+    ''
+  );
+}
+
+function getCustomerName(order) {
+  return (
+    order?.clienteNombre ||
+    order?.customerName ||
+    order?.delivery?.customerName ||
+    'cliente'
+  );
+}
+
+function openWhatsApp(numberRaw, message) {
+  const normalized = normalizeArWhatsApp(numberRaw);
+  if (!normalized) {
+    setStatus('No hay numero de WhatsApp disponible para este pedido.');
+    return;
+  }
+  const text = encodeURIComponent(String(message || '').trim());
+  const url = `https://wa.me/${normalized}?text=${text}`;
+  const opened = window.open(url, '_blank');
+  if (!opened) window.location.href = url;
+}
+
+function openSupport(order) {
+  const normalized = '5492964537272';
+  const orderId = order?.id || '';
+  const msg = `Hola soporte Windi, necesito ayuda con el pedido ${orderId || '-'}. Mi problema es: `;
+  openWhatsApp(normalized, msg);
+}
+
+function updateQuickActionsUi() {
+  const hasOrder = !!activeOrder;
+  if (waClientBtn) waClientBtn.disabled = !hasOrder;
+  if (supportBtn) supportBtn.disabled = false;
+  if (supportFab) supportFab.disabled = false;
+
+  if (!hasOrder) {
+    if (quickActionsHint) quickActionsHint.textContent = 'Acepta un pedido para habilitar acciones rapidas.';
+    return;
+  }
+  const phone = getCustomerWhatsapp(activeOrder);
+  if (waClientBtn) {
+    waClientBtn.disabled = !phone;
+  }
+  if (quickActionsHint) {
+    quickActionsHint.textContent = phone
+      ? 'Acciones rapidas listas: contacto al cliente y soporte.'
+      : 'Este pedido no tiene WhatsApp del cliente cargado. (Se puede seguir con navegacion y entrega igual.)';
+  }
+}
 
 function isPickupStage(order) {
   const state = (order?.estado || '').toString().toLowerCase();
@@ -162,68 +240,167 @@ function getPickupGeo(order) {
   return { lat, lng };
 }
 
-function buildGoogleMapsNavUrl(destination, origin) {
-  if (!destination) return null;
-  const dest = `${destination.lat},${destination.lng}`;
-  const params = new URLSearchParams({
-    api: '1',
-    destination: dest,
-    travelmode: 'driving'
+function buildRouteKey(order) {
+  if (!order) return '';
+  const stage = isPickupStage(order) ? 'pickup' : (isDeliveryStage(order) ? 'dropoff' : 'none');
+  return `${order.id || ''}:${stage}`;
+}
+
+function metersBetween(a, b) {
+  if (!a || !b) return null;
+  return haversineMeters(a, b);
+}
+
+function createPinElement(kind) {
+  const el = document.createElement('div');
+  el.className = `courier-pin ${kind}`;
+  return el;
+}
+
+async function ensureCourierMap(center) {
+  if (!mapContainer) return;
+  if (map && window.mapboxgl) return;
+  if (!window.mapboxgl) return;
+  const token = await getMapboxToken();
+  if (!token) return;
+
+  mapboxgl.accessToken = token;
+  map = new mapboxgl.Map({
+    container: mapContainer,
+    style: 'mapbox://styles/mapbox/navigation-day-v1',
+    center: [center.lng, center.lat],
+    zoom: 14
   });
-  if (origin) params.set('origin', `${origin.lat},${origin.lng}`);
-  return `https://www.google.com/maps/dir/?${params.toString()}`;
+  map.addControl(new mapboxgl.NavigationControl({ showCompass: false }), 'bottom-right');
+
+  courierMarker = new mapboxgl.Marker({ element: createPinElement('courier') })
+    .setLngLat([center.lng, center.lat])
+    .addTo(map);
+
+  pickupMarker = new mapboxgl.Marker({ element: createPinElement('pickup') });
+  dropoffMarker = new mapboxgl.Marker({ element: createPinElement('dropoff') });
+
+  map.on('load', () => {
+    map.addSource('courier-route', {
+      type: 'geojson',
+      data: {
+        type: 'Feature',
+        geometry: { type: 'LineString', coordinates: [] }
+      }
+    });
+    map.addLayer({
+      id: 'courier-route',
+      type: 'line',
+      source: 'courier-route',
+      paint: {
+        'line-color': '#0ea5e9',
+        'line-width': 5,
+        'line-opacity': 0.9
+      }
+    });
+    map.addLayer({
+      id: 'courier-route-glow',
+      type: 'line',
+      source: 'courier-route',
+      paint: {
+        'line-color': '#0ea5e9',
+        'line-width': 10,
+        'line-opacity': 0.2
+      }
+    }, 'courier-route');
+    routeSourceReady = true;
+  });
 }
 
-function openNavigationTo(destination, label) {
-  if (!destination) {
-    setStatus(`No hay coordenadas para ${label}.`);
-    return;
-  }
-  const origin = currentPosition ? { lat: currentPosition.lat, lng: currentPosition.lng } : null;
-  const url = buildGoogleMapsNavUrl(destination, origin);
-  const opened = window.open(url, '_blank');
-  if (!opened) {
-    window.location.href = url;
-  }
+function setRouteGeometry(coordinates) {
+  if (!map || !routeSourceReady) return;
+  const source = map.getSource('courier-route');
+  if (!source) return;
+  source.setData({
+    type: 'Feature',
+    geometry: { type: 'LineString', coordinates: Array.isArray(coordinates) ? coordinates : [] }
+  });
 }
 
-async function refreshNavEtaInfo() {
-  if (!navEtaInfo) return;
+async function updateCourierMapAndRoute({ force = false } = {}) {
   if (!activeOrder) {
-    navEtaInfo.textContent = 'Sin ruta activa.';
+    if (mapInfo) mapInfo.textContent = 'Acepta un pedido para ver el mapa y la ruta.';
+    if (navEtaInfo) navEtaInfo.textContent = 'Sin ruta activa.';
     return;
   }
-  const target = isPickupStage(activeOrder) ? getPickupGeo(activeOrder) : resolveDestinationGeo(activeOrder);
-  if (!target) {
-    navEtaInfo.textContent = 'Sin coordenadas para calcular ruta.';
+  const pickup = getPickupGeo(activeOrder);
+  const dropoff = resolveDestinationGeo(activeOrder);
+  const stageTarget = isPickupStage(activeOrder) ? pickup : dropoff;
+  if (!pickup || !dropoff) {
+    if (mapInfo) mapInfo.textContent = 'Este pedido no tiene coordenadas completas (retiro/destino).';
     return;
   }
   if (!currentPosition) {
-    navEtaInfo.textContent = 'Activa GPS para calcular distancia y tiempo por calles.';
+    if (mapInfo) mapInfo.textContent = 'Activa GPS para ver tu ubicacion y calcular ruta por calles.';
     return;
   }
+
+  await ensureCourierMap({ lat: currentPosition.lat, lng: currentPosition.lng });
+  if (!map) return;
+
+  // Markers
+  if (courierMarker) courierMarker.setLngLat([currentPosition.lng, currentPosition.lat]);
+  if (pickupMarker) pickupMarker.setLngLat([pickup.lng, pickup.lat]).addTo(map);
+  if (dropoffMarker) dropoffMarker.setLngLat([dropoff.lng, dropoff.lat]).addTo(map);
+
+  // Debounce route fetches
+  const key = buildRouteKey(activeOrder);
+  const origin = { lat: currentPosition.lat, lng: currentPosition.lng };
+  const dest = stageTarget;
+  const moved = lastRouteOrigin ? metersBetween(origin, lastRouteOrigin) : null;
+  const now = Date.now();
+  const shouldFetch = force
+    || key !== lastRouteKey
+    || (moved != null && moved >= 80)
+    || (now - lastRouteFetchAt) >= 20000;
+
+  if (!shouldFetch) return;
+  lastRouteFetchAt = now;
+  lastRouteKey = key;
+  lastRouteOrigin = origin;
+
   try {
     const token = await getMapboxToken();
     if (!token) {
-      navEtaInfo.textContent = 'Mapbox no configurado para calcular ETA.';
+      if (mapInfo) mapInfo.textContent = 'Mapbox no configurado.';
       return;
     }
-    const now = Date.now();
-    if (now - lastNavEtaFetchAt < 10000) return;
-    lastNavEtaFetchAt = now;
-    const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${currentPosition.lng},${currentPosition.lat};${target.lng},${target.lat}?access_token=${token}&overview=false`;
+    if (mapInfo) mapInfo.textContent = isPickupStage(activeOrder) ? 'Ruta: yendo a retirar...' : 'Ruta: yendo a entregar...';
+
+    const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${origin.lng},${origin.lat};${dest.lng},${dest.lat}?access_token=${token}&geometries=geojson&overview=full&alternatives=false&steps=false`;
     const res = await fetch(url);
-    const data = await res.json();
+    const data = await res.json().catch(() => ({}));
     const route = data?.routes?.[0];
-    if (!route) {
-      navEtaInfo.textContent = 'No se pudo calcular ETA por calles.';
+    if (!route?.geometry?.coordinates?.length) {
+      setRouteGeometry([]);
+      if (navEtaInfo) navEtaInfo.textContent = 'No se pudo calcular ruta por calles.';
+      if (mapInfo) mapInfo.textContent = 'No se pudo calcular ruta por calles. Reintentando con GPS...';
       return;
     }
+
+    setRouteGeometry(route.geometry.coordinates);
     const km = (Number(route.distance || 0) / 1000).toFixed(1);
-    const min = Math.round(Number(route.duration || 0) / 60);
-    navEtaInfo.textContent = `Ruta por calles: ${km} km | ETA aprox: ${min} min`;
+    const min = Math.max(1, Math.round(Number(route.duration || 0) / 60));
+    if (navEtaInfo) navEtaInfo.textContent = `Ruta por calles: ${km} km | ETA aprox: ${min} min`;
+
+    // Fit only when stage changes / new order, to avoid "jumping" all the time.
+    if (lastFitKey !== key) {
+      lastFitKey = key;
+      const bounds = new mapboxgl.LngLatBounds();
+      bounds.extend([origin.lng, origin.lat]);
+      bounds.extend([pickup.lng, pickup.lat]);
+      bounds.extend([dropoff.lng, dropoff.lat]);
+      map.fitBounds(bounds, { padding: 60, duration: 600 });
+    }
   } catch {
-    navEtaInfo.textContent = 'No se pudo calcular ETA por calles.';
+    setRouteGeometry([]);
+    if (navEtaInfo) navEtaInfo.textContent = 'No se pudo calcular ruta por calles.';
+    if (mapInfo) mapInfo.textContent = 'No se pudo calcular ruta por calles.';
   }
 }
 
@@ -244,12 +421,12 @@ function updateGpsCard() {
   }
   if (gpsStatus === 'error') {
     gpsStateBadge.className = 'status pending';
-    gpsStateBadge.textContent = 'Sin señal GPS';
+    gpsStateBadge.textContent = 'Sin senal GPS';
     gpsInfo.textContent = 'No se pudo obtener ubicacion. Reintenta.';
     return;
   }
   gpsStateBadge.className = 'status pending';
-  gpsStateBadge.textContent = 'Buscando señal';
+  gpsStateBadge.textContent = 'Buscando senal';
   gpsInfo.textContent = 'Esperando ubicacion en tiempo real...';
 }
 
@@ -321,80 +498,19 @@ function refreshActionButtons() {
   deliverBtn.disabled = !hasActive || !canDeliverActiveOrder().ok;
   cancelBtn.disabled = !hasActive;
   withdrawBtn.disabled = !profileApproved;
-  if (navPickupBtn) navPickupBtn.disabled = !hasActive || !isPickupStage(activeOrder);
   if (markPickedUpBtn) markPickedUpBtn.disabled = !hasActive || !isPickupStage(activeOrder);
-  if (navDropoffBtn) navDropoffBtn.disabled = !hasActive || !isDeliveryStage(activeOrder);
   updateGpsCard();
   updateDeliveryDistanceUi();
-  refreshNavEtaInfo();
+  updateCourierMapAndRoute().catch(() => {});
+  updateQuickActionsUi();
   if (ordersCache) renderPedidos(ordersCache);
-}
-
-async function ensureMap(loc) {
-  if (!map || !window.mapboxgl) {
-    if (!window.mapboxgl) return;
-    const token = await getMapboxToken();
-    if (!token) return;
-    mapboxgl.accessToken = token;
-    map = new mapboxgl.Map({
-      container: mapContainer,
-      style: 'mapbox://styles/mapbox/navigation-day-v1',
-      center: [loc.lng, loc.lat],
-      zoom: 15
-    });
-    marker = new mapboxgl.Marker({ color: '#0ea5e9' })
-      .setLngLat([loc.lng, loc.lat])
-      .addTo(map);
-
-    map.on('load', () => {
-      map.addSource('tracking-route', {
-        type: 'geojson',
-        data: {
-          type: 'Feature',
-          geometry: {
-            type: 'LineString',
-            coordinates: [[loc.lng, loc.lat]]
-          }
-        }
-      });
-      map.addLayer({
-        id: 'tracking-route',
-        type: 'line',
-        source: 'tracking-route',
-        paint: {
-          'line-color': '#22c55e',
-          'line-width': 4
-        }
-      });
-      routeAdded = true;
-    });
-    return;
-  }
-
-  marker.setLngLat([loc.lng, loc.lat]);
-  map.easeTo({ center: [loc.lng, loc.lat], duration: 500 });
-}
-
-function updateRoute(loc) {
-  routeCoords.push([loc.lng, loc.lat]);
-  if (routeCoords.length > 200) routeCoords.shift();
-  if (!routeAdded || !map) return;
-  const source = map.getSource('tracking-route');
-  if (!source) return;
-  source.setData({
-    type: 'Feature',
-    geometry: {
-      type: 'LineString',
-      coordinates: routeCoords
-    }
-  });
 }
 
 function setActiveOrder(order, id) {
   if (!order) {
     activeOrder = null;
     activoInfo.textContent = 'No hay pedido activo. Acepta uno desde "Pedidos disponibles".';
-    mapInfo.textContent = 'Acepta un pedido y activa GPS para ver el mapa.';
+    if (mapInfo) mapInfo.textContent = 'Acepta un pedido para ver el mapa y la ruta.';
     if (navEtaInfo) navEtaInfo.textContent = 'Sin ruta activa.';
     refreshActionButtons();
     return;
@@ -407,7 +523,12 @@ function setActiveOrder(order, id) {
   };
   const kmText = order.km != null ? `${order.km} km` : 'Km -';
   const payout = order.payout ?? order.precio;
-  const pagoLabel = order.pagoMetodo === 'cash_delivery' ? 'Efectivo (cobras total)' : 'Comercio paga envio';
+  const method = String(order.pagoMetodo || '').toLowerCase();
+  const pagoLabel = method === 'cash_delivery'
+    ? 'Efectivo (cobras al recibir)'
+    : method === 'transfer_delivery'
+      ? 'Transferencia (cobras al recibir)'
+      : 'Pago con tarjeta (Mercado Pago)';
   const etapa = isPickupStage(order) ? 'En camino a retirar' : (isDeliveryStage(order) ? 'En camino a entregar' : 'Pedido activo');
   activoInfo.textContent = `${etapa} | ${order.origen} -> ${order.destino} | ${kmText} | ${fmtMoney(payout)} | ${pagoLabel}`;
   refreshActionButtons();
@@ -420,6 +541,13 @@ async function stopTracking() {
   }
   if (gpsStatus !== 'denied') gpsStatus = 'searching';
   currentPosition = null;
+  // Best-effort: mark courier offline for admin dispatch. (Cannot guarantee on abrupt app kill.)
+  try {
+    const uid = auth.currentUser?.uid;
+    if (uid) {
+      await update(ref(db, `courierPresence/${uid}`), { status: 'offline', updatedAt: Date.now() });
+    }
+  } catch {}
   refreshActionButtons();
 }
 
@@ -434,6 +562,20 @@ async function onGpsPosition(pos) {
   };
   gpsStatus = 'active';
   refreshActionButtons();
+
+  // Presence for admin dispatch (online couriers). Only publish if the profile is approved.
+  try {
+    const uid = auth.currentUser?.uid;
+    if (uid && profileApproved) {
+      await set(ref(db, `courierPresence/${uid}`), {
+        status: 'online',
+        lat: latitude,
+        lng: longitude,
+        accuracy: Number(accuracy || 9999),
+        updatedAt: now
+      });
+    }
+  } catch {}
 
   if (!activeOrder) return;
   const updates = {
@@ -466,8 +608,7 @@ async function onGpsPosition(pos) {
     }
     await update(ref(db, `publicTracking/${activeOrder.trackingToken}`), updates);
     mapInfo.textContent = `Ubicacion actualizada ${new Date(now).toLocaleTimeString('es-AR')}`;
-    ensureMap({ lat: latitude, lng: longitude }).catch(() => {});
-    updateRoute({ lat: latitude, lng: longitude });
+    updateCourierMapAndRoute().catch(() => {});
   } catch (err) {
     setStatus(err.message || 'No se pudo actualizar ubicacion.');
   }
@@ -648,6 +789,10 @@ if (gpsRetryBtn) {
 
 window.addEventListener('beforeunload', () => {
   if (watchId !== null) navigator.geolocation.clearWatch(watchId);
+  try {
+    const uid = auth.currentUser?.uid;
+    if (uid) update(ref(db, `courierPresence/${uid}`), { status: 'offline', updatedAt: Date.now() });
+  } catch {}
 });
 
 startTrackingBtn.addEventListener('click', () => {
@@ -662,18 +807,26 @@ stopTrackingBtn.addEventListener('click', () => {
   setStatus('GPS detenido.');
 });
 
-if (navPickupBtn) {
-  navPickupBtn.addEventListener('click', () => {
+if (waClientBtn) {
+  waClientBtn.addEventListener('click', () => {
     if (!activeOrder) return setStatus('No hay pedido activo.');
-    openNavigationTo(getPickupGeo(activeOrder), 'retiro');
+    const phone = getCustomerWhatsapp(activeOrder);
+    const name = getCustomerName(activeOrder);
+    const msg = `Hola ${name}, soy tu repartidor de Windi. Estoy en camino con tu pedido ${activeOrder.id || ''}. ¿Podés confirmarme la referencia de tu domicilio?`;
+    openWhatsApp(phone, msg);
   });
 }
 
-if (navDropoffBtn) {
-  navDropoffBtn.addEventListener('click', () => {
-    if (!activeOrder) return setStatus('No hay pedido activo.');
-    openNavigationTo(resolveDestinationGeo(activeOrder), 'entrega');
-  });
+function handleSupportClick() {
+  openSupport(activeOrder);
+}
+
+if (supportBtn) {
+  supportBtn.addEventListener('click', handleSupportClick);
+}
+
+if (supportFab) {
+  supportFab.addEventListener('click', handleSupportClick);
 }
 
 async function markPickedUp() {
@@ -723,8 +876,8 @@ async function markPickedUp() {
       pickedUpAt: now
     };
     refreshActionButtons();
-    openNavigationTo(resolveDestinationGeo(activeOrder), 'entrega');
-    setStatus('Pedido marcado como retirado. Navegando al destino.');
+    updateCourierMapAndRoute({ force: true }).catch(() => {});
+    setStatus('Pedido marcado como retirado. Ruta actualizada para entrega.');
   } catch (err) {
     setStatus(err.message);
   }
@@ -837,7 +990,12 @@ function renderPedidos(data) {
     div.className = 'item';
     const kmText = p.km != null ? `${p.km} km` : 'Km -';
     const payout = p.payout ?? p.precio;
-    const pagoLabel = p.pagoMetodo === 'cash_delivery' ? `Efectivo (cobras ${fmtMoney(p.totalPedido)})` : 'Comercio paga envio';
+    const method = String(p.pagoMetodo || '').toLowerCase();
+    const pagoLabel = method === 'cash_delivery'
+      ? `Efectivo (cobras ${fmtMoney(p.totalPedido)})`
+      : method === 'transfer_delivery'
+        ? `Transferencia (cobras ${fmtMoney(p.totalPedido)})`
+        : 'Pago con tarjeta (Mercado Pago)';
     const canTake = canTakeOrders();
     div.innerHTML = `
       <div class="row">
@@ -929,8 +1087,8 @@ async function aceptarPedido(id) {
   });
 
   setActiveOrder({ ...order, estado: 'en-camino-retiro', repartidorId: auth.currentUser.uid }, id);
-  openNavigationTo(getPickupGeo({ ...order, estado: 'en-camino-retiro' }), 'retiro');
-  setStatus('Pedido aceptado. Navegando al punto de retiro.');
+  updateCourierMapAndRoute({ force: true }).catch(() => {});
+  setStatus('Pedido aceptado. Ruta generada para el retiro.');
 }
 
 onAuthStateChanged(auth, (user) => {
@@ -987,10 +1145,7 @@ onAuthStateChanged(auth, (user) => {
       if (!entry) return setActiveOrder(null, null);
       const [id, order] = entry;
       setActiveOrder(order, id);
-      if (order.ubicacion) {
-        ensureMap(order.ubicacion).catch(() => {});
-        updateRoute(order.ubicacion);
-      }
+      updateCourierMapAndRoute({ force: true }).catch(() => {});
     });
 
     const walletRef = ref(db, `wallets/${user.uid}`);

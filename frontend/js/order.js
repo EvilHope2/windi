@@ -10,6 +10,52 @@ const id = idFromPath || new URLSearchParams(location.search).get('id');
 
 function setStatus(msg) { statusEl.textContent = msg || ''; }
 
+function stepperModel(status) {
+  const s = String(status || 'created');
+  const steps = [
+    { key: 'created', label: 'Pedido creado' },
+    { key: 'confirmed', label: 'Confirmado' },
+    { key: 'preparing', label: 'Preparando' },
+    { key: 'ready_for_pickup', label: 'Listo para retirar' },
+    { key: 'assigned', label: 'Repartidor asignado' },
+    { key: 'picked_up', label: 'En camino' },
+    { key: 'delivered', label: 'Entregado' }
+  ];
+
+  if (s === 'cancelled') {
+    return {
+      steps: [
+        { key: 'created', label: 'Pedido creado' },
+        { key: 'cancelled', label: 'Cancelado' }
+      ],
+      active: 'cancelled'
+    };
+  }
+
+  const idx = Math.max(0, steps.findIndex((x) => x.key === s));
+  const active = steps[idx] ? steps[idx].key : 'created';
+  return { steps, active };
+}
+
+function renderStepper(status) {
+  const { steps, active } = stepperModel(status);
+  const activeIdx = steps.findIndex((x) => x.key === active);
+  const html = steps.map((st, i) => {
+    const cls = i < activeIdx ? 'done' : (i === activeIdx ? 'active' : '');
+    const num = i < activeIdx ? '✓' : String(i + 1);
+    return `
+      <div class="step ${cls}">
+        <div class="dot">${num}</div>
+        <div>
+          <div class="label">${st.label}</div>
+          <div class="time">${i === activeIdx ? 'Estado actual' : ''}</div>
+        </div>
+      </div>
+    `;
+  }).join('');
+  return `<div class="stepper">${html}</div>`;
+}
+
 function renderStatusLog(orderId) {
   onValue(ref(db, `marketplaceOrderStatusLog/${orderId}`), (snap) => {
     const logs = snap.val() || {};
@@ -32,18 +78,49 @@ if (!id) {
       return;
     }
     const trackUrl = o.delivery?.trackingToken ? `${location.origin}/tracking.html?t=${encodeURIComponent(o.delivery.trackingToken)}` : '';
+    const status = String(o.orderStatus || 'created');
+    const paymentStatus = String(o.paymentStatus || '');
+    const canPayNow = String(o.paymentMethod || '') === 'mp_card' && paymentStatus === 'pending' && o.mpCheckoutUrl;
+    const pillClass =
+      status === 'delivered' ? 'good' :
+      status === 'cancelled' ? 'bad' :
+      status === 'preparing' || status === 'ready_for_pickup' || status === 'assigned' || status === 'picked_up' ? 'info' :
+      'warn';
     detail.innerHTML = `
       <div class="title-row"><span class="icon">P</span><h2>Pedido ${id}</h2></div>
-      <div class="item"><div class="muted">Estado</div><strong>${o.orderStatus}</strong></div>
-      <div class="item"><div class="muted">Pago</div><strong>${o.paymentStatus}</strong></div>
-      <div class="item"><div class="muted">Subtotal</div><strong>${fmtMoney(o.subtotalProducts)}</strong></div>
-      <div class="item"><div class="muted">Envio</div><strong>${fmtMoney(o.deliveryFee)}</strong></div>
-      <div class="item"><div class="muted">Total</div><strong>${fmtMoney(o.total)}</strong></div>
-      <div class="item"><div class="muted">Direccion</div><strong>${o.delivery?.address || '-'}</strong></div>
-      <div class="item"><div class="muted">Creado</div><strong>${fmtTime(o.createdAt)}</strong></div>
-      ${trackUrl ? `<div class="item"><a href="${trackUrl}">Ver tracking del delivery</a></div>` : ''}
-      <div class="item"><div class="muted">Historial de estado</div><ul id="orderStatusHistory" class="muted"></ul></div>
+      <div class="list-card" style="margin-top:10px;">
+        <div class="list-card-head">
+          <div>
+            <div class="list-card-title">Estado</div>
+            <div class="list-card-sub">${fmtTime(o.updatedAt || o.createdAt)}</div>
+          </div>
+          <span class="status-pill ${pillClass} dot">${status}</span>
+        </div>
+        ${renderStepper(status)}
+        ${trackUrl ? `<div style="margin-top:12px;"><a class="primary-cta" href="${trackUrl}">Ver tracking en vivo</a></div>` : ''}
+      </div>
+
+      <div class="list-card" style="margin-top:10px;">
+        <div class="list-card-title">Resumen</div>
+        <div class="list-card-sub">Direccion: ${o.delivery?.address || '-'}</div>
+        <div class="muted" style="margin-top:10px;">Subtotal: <strong>${fmtMoney(o.subtotalProducts)}</strong></div>
+        <div class="muted">Envio: <strong>${fmtMoney(o.deliveryFee)}</strong></div>
+        <div class="muted">Total: <strong>${fmtMoney(o.total)}</strong></div>
+        <div class="muted">Pago: <strong>${paymentStatus || '-'}</strong></div>
+        ${canPayNow ? `<div class="row" style="margin-top:12px;"><button id="payNowBtn" type="button">Pagar ahora (Mercado Pago)</button></div>` : ''}
+      </div>
+
+      <div class="list-card" style="margin-top:10px;">
+        <div class="list-card-title">Historial</div>
+        <ul id="orderStatusHistory" class="muted" style="margin:8px 0 0; padding-left:18px;"></ul>
+      </div>
     `;
+    const payBtn = qs('payNowBtn');
+    if (payBtn && o.mpCheckoutUrl) {
+      payBtn.addEventListener('click', () => {
+        window.location.href = o.mpCheckoutUrl;
+      });
+    }
     renderStatusLog(id);
   }, (err) => setStatus(err.message));
 }

@@ -13,6 +13,14 @@ function setStatus(msg) {
   statusEl.textContent = msg || '';
 }
 
+function normalizeArWhatsApp(raw) {
+  const digits = String(raw || '').replace(/\D/g, '');
+  if (!digits) return '';
+  const noLeading0 = digits.startsWith('0') ? digits.slice(1) : digits;
+  if (noLeading0.startsWith('54')) return `+${noLeading0}`;
+  return `+54${noLeading0}`;
+}
+
 async function ensureCustomerProfile(user) {
   const userRef = ref(db, `users/${user.uid}`);
   const snap = await get(userRef);
@@ -46,12 +54,16 @@ qs('loginBtn').addEventListener('click', async () => {
 qs('signupBtn').addEventListener('click', async () => {
   try {
     const email = qs('signupEmail').value.trim();
+    const whatsappRaw = qs('signupWhatsapp')?.value?.trim() || '';
+    const whatsapp = normalizeArWhatsApp(whatsappRaw);
     const password = qs('signupPassword').value.trim();
     if (!email || !password) return setStatus('Completa email y contrasena.');
+    if (!whatsapp || whatsapp.replace(/\D/g, '').length < 10) return setStatus('Completa tu WhatsApp valido.');
     const cred = await createUserWithEmailAndPassword(auth, email, password);
     await set(ref(db, `users/${cred.user.uid}`), {
       email,
       role: 'customer',
+      whatsapp,
       createdAt: Date.now()
     });
     window.location.href = '/marketplace';

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { computeDeliveryFee, canMarkDeliveredByProximity, haversineKm } from '../marketplace-core.js';
+import { computeDeliveryFee, canMarkDeliveredByProximity, haversineKm, computeCourierCommission } from '../marketplace-core.js';
 
 test('haversineKm returns near zero for equal points', () => {
   const km = haversineKm(
@@ -36,4 +36,10 @@ test('canMarkDeliveredByProximity enforces distance and accuracy', () => {
     canMarkDeliveredByProximity({ distanceMeters: 30, accuracyMeters: 80 }),
     false
   );
+});
+
+test('computeCourierCommission returns payout and commission', () => {
+  const result = computeCourierCommission({ deliveryFee: 2000, rate: 0.15 });
+  assert.equal(result.courierCommissionAmount, 300);
+  assert.equal(result.courierPayout, 1700);
 });

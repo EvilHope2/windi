@@ -8,19 +8,42 @@
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
-  <div class="container">
-    <div class="header">
-      <div class="brand">Mis pedidos</div>
-      <div class="row" style="max-width:420px;">
-        <a class="badge" href="/marketplace">Marketplace</a>
+  <div class="app-page">
+    <header class="app-topbar">
+      <div class="app-topbar-inner">
+        <div class="app-title">
+          <a class="icon-btn" href="/marketplace" aria-label="Volver al marketplace">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M15 18l-6-6 6-6"/>
+            </svg>
+          </a>
+          <h1>Mis pedidos</h1>
+        </div>
+        <div class="app-actions">
+          <a class="icon-btn" href="/mi-cuenta" aria-label="Mi cuenta">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+            </svg>
+          </a>
+        </div>
       </div>
-    </div>
-    <div class="card" style="margin-top:16px;">
+    </header>
+
+    <div class="card">
       <div id="authInfo" class="muted"></div>
       <div id="ordersList" class="list" style="margin-top:10px;"></div>
     </div>
     <div id="status" class="footer"></div>
   </div>
+
+  <nav class="app-bottom-nav" aria-label="Navegacion principal">
+    <div class="nav-inner">
+      <a class="app-tab" href="/marketplace"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/></svg><span>Inicio</span></a>
+      <a class="app-tab" href="/marketplace" aria-label="Buscar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg><span>Buscar</span></a>
+      <a class="app-tab active" href="/me/orders"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13"/><path d="M3 6h.01M3 12h.01M3 18h.01"/></svg><span>Pedidos</span></a>
+      <a class="app-tab" href="/mi-cuenta"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><span>Cuenta</span></a>
+    </div>
+  </nav>
   <script src="/js/sw-register.js"></script>
   <script type="module" src="/js/my-orders.js"></script>
 </body>

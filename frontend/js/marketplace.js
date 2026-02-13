@@ -31,6 +31,7 @@ const floatingCartTotal = qs('floatingCartTotal');
 
 let merchants = {};
 let products = {};
+let merchantsLoaded = false;
 let currentMerchantId = null;
 let currentUser = null;
 let visibleMerchantCount = 8;
@@ -46,6 +47,23 @@ const requestedMerchantId = pathParts[0] === 'marketplace' && pathParts[1]
 
 function setStatus(msg) {
   statusEl.textContent = msg || '';
+}
+
+function renderMerchantSkeleton(count = 6) {
+  merchantList.innerHTML = '';
+  for (let i = 0; i < count; i += 1) {
+    const div = document.createElement('div');
+    div.className = 'skeleton-card';
+    div.innerHTML = `
+      <div class="skeleton media"></div>
+      <div style="display:grid; gap:8px; align-content:center;">
+        <div class="skeleton line" style="width: 72%;"></div>
+        <div class="skeleton line sm"></div>
+        <div class="skeleton line" style="width: 88%; height: 10px;"></div>
+      </div>
+    `;
+    merchantList.appendChild(div);
+  }
 }
 
 function merchantCategory(merchant) {
@@ -485,12 +503,13 @@ onAuthStateChanged(auth, async (user) => {
     return;
   }
 
-  authInfo.textContent = `Sesion: ${user.email || user.uid}`;
+  authInfo.textContent = user.email ? user.email : 'Sesion activa';
   updateFloatingCart();
 });
 
 onValue(ref(db, 'merchants'), (snap) => {
   merchants = snap.val() || {};
+  merchantsLoaded = true;
 
   if (requestedMerchantId && merchants[requestedMerchantId]) {
     openMerchant(requestedMerchantId, false);
@@ -513,3 +532,8 @@ onValue(ref(db, 'products'), (snap) => {
 }, (err) => setStatus(err.message));
 
 // No fallback from /users due read restrictions for non-admin users.
+
+// Initial UX: show skeleton before first DB payload arrives.
+if (merchantList) {
+  renderMerchantSkeleton(6);
+}

@@ -16,7 +16,7 @@ onAuthStateChanged(auth, (user) => {
     return;
   }
 
-  authInfo.textContent = `Sesion: ${user.email || user.uid}`;
+  authInfo.textContent = user.email ? `Sesion: ${user.email}` : 'Sesion activa';
   onValue(ref(db, 'marketplaceOrders'), (snap) => {
     const all = snap.val() || {};
     const entries = Object.entries(all)
@@ -25,21 +25,37 @@ onAuthStateChanged(auth, (user) => {
 
     ordersList.innerHTML = '';
     if (!entries.length) {
-      ordersList.innerHTML = '<div class="item"><div class="muted">Sin pedidos todavia.</div></div>';
+      ordersList.innerHTML = `
+        <div class="empty-state">
+          <strong>Sin pedidos todavia</strong>
+          <div class="muted">Cuando hagas tu primer pedido, aparece aca con el seguimiento.</div>
+          <a class="primary-cta" href="/marketplace">Hacer mi primer pedido</a>
+        </div>
+      `;
       return;
     }
 
     entries.forEach(([id, o]) => {
       const div = document.createElement('div');
-      div.className = 'item';
+      div.className = 'list-card';
+      const status = (o.orderStatus || 'created').toString();
+      const pillClass =
+        status === 'delivered' ? 'good' :
+        status === 'cancelled' ? 'bad' :
+        status === 'preparing' || status === 'ready_for_pickup' || status === 'assigned' || status === 'picked_up' ? 'info' :
+        'warn';
       div.innerHTML = `
-        <div class="row">
-          <strong>Pedido ${id}</strong>
-          <span class="status ${o.orderStatus || 'created'}">${o.orderStatus || 'created'}</span>
+        <div class="list-card-head">
+          <div>
+            <div class="list-card-title">Pedido ${id}</div>
+            <div class="list-card-sub">Creado: ${fmtTime(o.createdAt)}</div>
+          </div>
+          <span class="status-pill ${pillClass} dot">${status}</span>
         </div>
-        <div class="muted">Total: ${fmtMoney(o.total || 0)}</div>
-        <div class="muted">Creado: ${fmtTime(o.createdAt)}</div>
-        <a href="/orders/${encodeURIComponent(id)}">Ver detalle</a>
+        <div class="muted" style="margin-top:8px;">Total: <strong>${fmtMoney(o.total || 0)}</strong></div>
+        <div style="margin-top:10px;">
+          <a class="primary-cta" href="/orders/${encodeURIComponent(id)}">Ver estado y tracking</a>
+        </div>
       `;
       ordersList.appendChild(div);
     });

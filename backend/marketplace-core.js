@@ -1,5 +1,6 @@
-﻿export const DEFAULT_COMMISSION_RATE = 0.05;
+export const DEFAULT_COMMISSION_RATE = 0.05;
 export const DEFAULT_COMMISSION_BASE = 'subtotal_products';
+export const DEFAULT_COURIER_COMMISSION_RATE = 0.15;
 
 export function computeSubtotalProducts(items = []) {
   return items.reduce((acc, item) => {
@@ -21,6 +22,17 @@ export function computeCommission({
     commissionRate: Number(rate || 0),
     commissionBase: base,
     commissionAmount
+  };
+}
+
+export function computeCourierCommission({ deliveryFee, rate = DEFAULT_COURIER_COMMISSION_RATE }) {
+  const fee = Number(deliveryFee || 0);
+  const r = Number(rate || 0);
+  const courierCommissionAmount = Math.round(fee * r);
+  return {
+    courierCommissionRate: r,
+    courierCommissionAmount,
+    courierPayout: Math.round(fee - courierCommissionAmount)
   };
 }
 

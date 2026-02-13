@@ -8,15 +8,27 @@
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
-  <div class="container">
-    <div class="header">
-      <div class="brand">Detalle de pedido</div>
-      <div class="row" style="max-width:420px;">
-        <a class="badge" href="/me/orders">Mis pedidos</a>
-        <a class="badge" href="/tracking.html">Tracking</a>
+  <div class="app-page">
+    <header class="app-topbar">
+      <div class="app-topbar-inner">
+        <div class="app-title">
+          <a class="icon-btn" href="/me/orders" aria-label="Volver a mis pedidos">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M15 18l-6-6 6-6"/>
+            </svg>
+          </a>
+          <h1>Pedido</h1>
+        </div>
+        <div class="app-actions">
+          <a class="icon-btn" href="/tracking.html" aria-label="Tracking">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 21s-7-4.5-7-11a7 7 0 0 1 14 0c0 6.5-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/>
+            </svg>
+          </a>
+        </div>
       </div>
-    </div>
-    <div id="orderDetail" class="card" style="margin-top:16px;"></div>
+    </header>
+    <div id="orderDetail" class="card"></div>
     <div id="status" class="footer"></div>
   </div>
   <script src="/js/sw-register.js"></script>

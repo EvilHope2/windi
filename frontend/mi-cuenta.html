@@ -9,30 +9,143 @@
   <link href="https://api.mapbox.com/mapbox-gl-js/v3.5.0/mapbox-gl.css" rel="stylesheet" />
 </head>
 <body>
-  <div class="container">
-    <div class="header">
-      <div class="brand">Mi cuenta</div>
-      <div class="row" style="max-width:560px;">
-        <a class="badge" href="/marketplace">Marketplace</a>
-        <a class="badge" href="/cart">Carrito</a>
+  <div class="app-page">
+    <header class="app-topbar">
+      <div class="app-topbar-inner">
+        <div class="app-title">
+          <a class="icon-btn" href="/marketplace" aria-label="Volver al marketplace">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M15 18l-6-6 6-6"/>
+            </svg>
+          </a>
+          <h1>Mi cuenta</h1>
+        </div>
+        <div class="app-actions">
+          <a class="icon-btn" href="/me/orders" aria-label="Mis pedidos">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M8 6h13M8 12h13M8 18h13"/><path d="M3 6h.01M3 12h.01M3 18h.01"/>
+            </svg>
+          </a>
+          <a class="icon-btn" href="/cart" aria-label="Carrito">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M6 6h15l-1.5 9h-13z"/><path d="M6 6 5 3H2"/><circle cx="9" cy="20" r="1"/><circle cx="18" cy="20" r="1"/>
+            </svg>
+          </a>
+        </div>
+      </div>
+    </header>
+
+    <div class="card">
+      <div class="title-row"><span class="icon">P</span><h2>Perfil</h2></div>
+      <form id="profileForm" class="stack">
+        <div class="row">
+          <input id="profileName" type="text" placeholder="Nombre y Apellido" required />
+          <input id="profileWhatsapp" type="tel" placeholder="WhatsApp" required />
+        </div>
+        <input id="profileAvatarUrl" type="url" placeholder="Avatar (URL opcional)" />
+        <input id="profileEmail" type="email" placeholder="Email" disabled />
+        <div class="row">
+          <button id="saveProfileBtn" type="submit">Guardar perfil</button>
+          <div id="profileSaved" class="muted"></div>
+        </div>
+      </form>
+    </div>
+
+    <div class="card" style="margin-top:12px;">
+      <div class="title-row"><span class="icon">D</span><h2>Direcciones</h2></div>
+      <div class="muted" style="margin-bottom:10px;">
+        Selecciona una direccion de la lista y ajusta el marcador para ubicar con precision tu casa.
+      </div>
+      <div id="addressesList" class="list"></div>
+      <div class="row" style="margin-top:10px;">
+        <button id="addAddressBtn" type="button" class="secondary">Agregar direccion</button>
+      </div>
+
+      <div id="addressEditor" class="card-flat hidden" style="margin-top:12px;">
+        <div class="title-row"><span class="icon">M</span><h3 id="addressEditorTitle">Nueva direccion</h3></div>
+        <form id="addressForm" class="stack">
+          <div class="row">
+            <select id="addressLabel">
+              <option value="Casa">Casa</option>
+              <option value="Trabajo">Trabajo</option>
+              <option value="Otro">Otro</option>
+            </select>
+            <label class="inline-check" style="justify-content:flex-end;">
+              <input id="addressPrimary" type="checkbox" />
+              <span>Principal</span>
+            </label>
+          </div>
+          <input id="address" placeholder="Ej: Bernardo O'Higgins 45, Rio Grande" required />
+          <div class="muted">Selecciona una direccion de la lista para continuar.</div>
+          <div id="addressMap" class="map"></div>
+          <input id="betweenStreets" placeholder="Entre calles (opcional)" />
+          <input id="reference" placeholder="Referencia (ej: casa blanca, porton negro)" />
+          <textarea id="addressNotes" placeholder="Indicaciones (opcional)"></textarea>
+          <div class="row">
+            <button id="saveAddressBtn" type="submit">Guardar direccion</button>
+            <button id="cancelAddressBtn" type="button" class="secondary">Cancelar</button>
+          </div>
+        </form>
       </div>
     </div>
 
-    <div class="card" style="margin-top:16px;">
-      <div class="title-row"><span class="icon">D</span><h2>Direccion de entrega</h2></div>
-      <div class="muted" style="margin-bottom:10px;">
-        Ajusta el marcador para indicar exactamente donde queres recibir tu pedido.
-      </div>
-      <form id="addressForm">
-        <input id="address" placeholder="Ej: Bernardo O'Higgins 45, Rio Grande" required />
-        <input id="reference" placeholder="Referencia (ej: casa blanca, porton negro)" />
-        <div id="addressMap" class="map"></div>
-        <button type="submit">Guardar direccion</button>
+    <div class="card" style="margin-top:12px;">
+      <div class="title-row"><span class="icon">E</span><h2>Preferencias de entrega</h2></div>
+      <form id="prefsForm" class="stack">
+        <label class="switch-row"><span>Tocar timbre</span><input id="prefRingBell" type="checkbox" /></label>
+        <label class="switch-row"><span>Llamar al llegar</span><input id="prefCallOnArrive" type="checkbox" /></label>
+        <label class="switch-row"><span>Solo WhatsApp</span><input id="prefWhatsappOnly" type="checkbox" /></label>
+        <label class="switch-row"><span>Dejar en puerta (si aplica)</span><input id="prefLeaveAtDoor" type="checkbox" /></label>
+        <textarea id="prefDefaultInstructions" placeholder="Instrucciones por defecto (se copian al checkout)"></textarea>
+        <div class="row">
+          <button type="submit">Guardar preferencias</button>
+          <div id="prefsSaved" class="muted"></div>
+        </div>
       </form>
+    </div>
+
+    <div class="card" style="margin-top:12px;">
+      <div class="title-row"><span class="icon">N</span><h2>Notificaciones</h2></div>
+      <div id="notifyState" class="muted">Cargando permisos...</div>
+      <label class="switch-row"><span>Notificaciones push</span><input id="prefPushEnabled" type="checkbox" /></label>
+      <label class="switch-row"><span>Sonido/Vibracion</span><input id="prefSoundEnabled" type="checkbox" /></label>
+      <div class="row" style="margin-top:10px;">
+        <button id="requestNotifyBtn" type="button" class="secondary">Reintentar permisos</button>
+      </div>
+      <div class="muted" style="margin-top:8px;">En PWA/TWA depende del dispositivo. Si esta denegado, habilitalo desde ajustes del navegador.</div>
+    </div>
+
+    <div class="card" style="margin-top:12px;">
+      <div class="title-row"><span class="icon">S</span><h2>Seguridad</h2></div>
+      <form id="passwordForm" class="stack">
+        <input id="currentPassword" type="password" placeholder="Contrasena actual" />
+        <input id="newPassword" type="password" placeholder="Nueva contrasena (min. 6)" />
+        <button type="submit" class="secondary">Cambiar contrasena</button>
+      </form>
+      <div class="row" style="margin-top:10px;">
+        <button id="logoutBtn" type="button" class="danger">Cerrar sesion</button>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:12px;">
+      <div class="title-row"><span class="icon">?</span><h2>Soporte</h2></div>
+      <div class="muted">Si necesitas ayuda con tu cuenta o un pedido, escribinos por WhatsApp.</div>
+      <div class="row" style="margin-top:10px;">
+        <button id="supportBtn" type="button">Abrir WhatsApp soporte</button>
+      </div>
     </div>
 
     <div id="status" class="footer"></div>
   </div>
+
+  <nav class="app-bottom-nav" aria-label="Navegacion principal">
+    <div class="nav-inner">
+      <a class="app-tab" href="/marketplace"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/></svg><span>Inicio</span></a>
+      <a class="app-tab" href="/marketplace" aria-label="Buscar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg><span>Buscar</span></a>
+      <a class="app-tab" href="/me/orders"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6h13M8 12h13M8 18h13"/><path d="M3 6h.01M3 12h.01M3 18h.01"/></svg><span>Pedidos</span></a>
+      <a class="app-tab active" href="/mi-cuenta"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg><span>Cuenta</span></a>
+    </div>
+  </nav>
   <script src="https://api.mapbox.com/mapbox-gl-js/v3.5.0/mapbox-gl.js"></script>
   <script src="/js/sw-register.js"></script>
   <script type="module" src="/js/mi-cuenta.js"></script>

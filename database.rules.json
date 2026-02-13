@@ -74,6 +74,24 @@
         ".read": "auth != null && (auth.uid == $uid || root.child('admins/' + auth.uid).val() == true)",
         ".write": "auth != null && (auth.uid == $uid || root.child('admins/' + auth.uid).val() == true)"
       }
+    },
+    "config": {
+      ".read": "auth != null && root.child('admins/' + auth.uid).val() == true",
+      ".write": "auth != null && root.child('admins/' + auth.uid).val() == true"
+    },
+    "adminLogs": {
+      ".read": "auth != null && root.child('admins/' + auth.uid).val() == true",
+      ".write": "auth != null && root.child('admins/' + auth.uid).val() == true"
+    },
+    "supportCases": {
+      ".read": "auth != null && root.child('admins/' + auth.uid).val() == true",
+      ".write": "auth != null && root.child('admins/' + auth.uid).val() == true"
+    },
+    "courierPresence": {
+      ".read": "auth != null && root.child('admins/' + auth.uid).val() == true",
+      "$uid": {
+        ".write": "auth != null && auth.uid == $uid"
+      }
     }
   }
 }

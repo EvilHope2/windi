@@ -8,6 +8,7 @@ import { getMapboxToken } from './mapbox-token.js';
 
 const DEFAULT_DELIVERY_BASE_FEE = 1500;
 const DEFAULT_DELIVERY_PER_KM = 500;
+const DEFAULT_COURIER_COMMISSION_RATE = 0.15;
 const RIO_GRANDE_BBOX = [-68.0, -54.15, -67.25, -53.55];
 const BACKEND_BASE_URL = 'https://windi-01ia.onrender.com';
 
@@ -16,6 +17,7 @@ const statusEl = qs('status');
 const authState = qs('authState');
 const shippingHint = qs('shippingHint');
 const deliveryAddressInput = qs('deliveryAddress');
+const customerWhatsappInput = qs('customerWhatsapp');
 const submitBtn = qs('checkoutForm button[type="submit"]');
 
 let currentUser = null;
@@ -28,9 +30,36 @@ let quoteErrorMessage = '';
 function setStatus(msg) { statusEl.textContent = msg || ''; }
 function setShippingHint(msg) { if (shippingHint) shippingHint.textContent = msg || ''; }
 
+function normalizeArWhatsApp(raw) {
+  const digits = String(raw || '').replace(/\D/g, '');
+  if (!digits) return '';
+  const noLeading0 = digits.startsWith('0') ? digits.slice(1) : digits;
+  if (noLeading0.startsWith('54')) return `+${noLeading0}`;
+  return `+54${noLeading0}`;
+}
+
+function inferCustomerName(user, profile) {
+  const fromProfile = (profile?.nombreApellido || profile?.name || '').toString().trim();
+  if (fromProfile) return fromProfile;
+  const email = (user?.email || '').toString();
+  if (email.includes('@')) return email.split('@')[0];
+  return 'Cliente';
+}
+
 function parseMoney(value) {
   const num = Number(value || 0);
   return Number.isNaN(num) ? 0 : num;
+}
+
+function computeCourierCommission(deliveryFee, rate = DEFAULT_COURIER_COMMISSION_RATE) {
+  const fee = Number(deliveryFee || 0);
+  const r = Number(rate || 0);
+  const commission = Math.round(fee * r);
+  return {
+    courierCommissionRate: r,
+    courierCommissionAmount: commission,
+    courierPayout: Math.round(fee - commission)
+  };
 }
 
 function pointInRioGrandeBBox(coords) {
@@ -143,11 +172,17 @@ async function quoteDeliveryFee(cart, customerCoords, customerAddress) {
   }
   if (!merchantCoords) throw new Error('El comercio no tiene ubicacion valida.');
 
-  const km = await routeDistanceKm(merchantCoords, customerCoords);
-  const roundedKm = Math.round(km * 10) / 10;
   const perKm = Number(merchant.deliveryPerKm || DEFAULT_DELIVERY_PER_KM);
   const baseFee = Number(merchant.deliveryBaseFee || DEFAULT_DELIVERY_BASE_FEE);
-  const fee = Math.round(baseFee + roundedKm * perKm);
+  let roundedKm = null;
+  try {
+    const km = await routeDistanceKm(merchantCoords, customerCoords);
+    roundedKm = Math.round(km * 10) / 10;
+  } catch (err) {
+    // If routing fails (e.g. Mapbox returns no route), we still allow checkout using base fee.
+    roundedKm = null;
+  }
+  const fee = Math.round(baseFee + (roundedKm == null ? 0 : roundedKm) * perKm);
 
   return {
     km: roundedKm,
@@ -204,6 +239,8 @@ function buildSummary() {
     setShippingHint('Calculando envio automaticamente...');
   } else if (quoteState === 'error') {
     setShippingHint(quoteErrorMessage || 'No se pudo calcular el envio.');
+  } else if (lastQuote?.km == null) {
+    setShippingHint('No se pudo calcular la ruta exacta. Se usara tarifa base.');
   } else if (lastQuote?.km != null) {
     setShippingHint(`Envio calculado automaticamente: ${lastQuote.km} km`);
   }
@@ -332,6 +369,15 @@ qs('checkoutForm').addEventListener('submit', async (e) => {
       });
     }
 
+    const inputWa = normalizeArWhatsApp(customerWhatsappInput?.value || '');
+    const storedWa = normalizeArWhatsApp(userData.whatsapp || '');
+    const whatsapp = storedWa || inputWa;
+    if (!whatsapp || whatsapp.replace(/\D/g, '').length < 10) {
+      return setStatus('Completa tu WhatsApp para coordinar la entrega.');
+    }
+
+    const customerName = inferCustomerName(currentUser, userData);
+
     const validatedItems = await validateCartAgainstDatabase(computed.cart);
     if (!lastQuote || lastQuote.km == null) {
       lastQuote = await quoteDeliveryFee(computed.cart, [Number(selected.lng), Number(selected.lat)], address);
@@ -342,6 +388,7 @@ qs('checkoutForm').addEventListener('submit', async (e) => {
     const total = subtotalProducts + deliveryFee;
     const commission = calcCommission(subtotalProducts, total, COMMISSION_CONFIG);
     const payoutMerchant = subtotalProducts - commission.commissionAmount;
+    const courierCommission = computeCourierCommission(deliveryFee, DEFAULT_COURIER_COMMISSION_RATE);
     const now = Date.now();
     const trackingToken = generateToken();
 
@@ -349,6 +396,7 @@ qs('checkoutForm').addEventListener('submit', async (e) => {
       email: currentUser.email || '',
       role: 'customer',
       address,
+      whatsapp,
       geo: { lng: Number(selected.lng), lat: Number(selected.lat) },
       city: 'Rio Grande',
       updatedAt: now
@@ -381,6 +429,8 @@ qs('checkoutForm').addEventListener('submit', async (e) => {
         notes,
         courierId: null,
         trackingToken,
+        customerName,
+        customerWhatsapp: whatsapp,
         merchantLocation: lastQuote.merchantCoords || null,
         customerLocation: { lng: Number(selected.lng), lat: Number(selected.lat) },
         distanceKm: lastQuote.km,
@@ -399,15 +449,22 @@ qs('checkoutForm').addEventListener('submit', async (e) => {
       destinoGeo: { lng: Number(selected.lng), lat: Number(selected.lat) },
       km: lastQuote.km,
       precio: deliveryFee,
-      comision: commission.commissionAmount,
-      payout: payoutMerchant,
-      comisionRate: commission.commissionRate,
-      totalPedido: subtotalProducts,
-      pagoMetodo: paymentMethod,
+      comision: courierCommission.courierCommissionAmount,
+      deliveryCommissionAmount: courierCommission.courierCommissionAmount,
+      payout: courierCommission.courierPayout,
+      comisionRate: courierCommission.courierCommissionRate,
+      totalPedido: total,
+      pagoMetodo: paymentMethod === 'cash_on_delivery'
+        ? 'cash_delivery'
+        : paymentMethod === 'transfer_on_delivery'
+          ? 'transfer_delivery'
+          : 'mp_card',
       estado: 'esperando-comercio',
       notas: notes || '',
       comercioId: computed.cart.merchantId,
       customerId: currentUser.uid,
+      clienteNombre: customerName,
+      clienteWhatsapp: whatsapp,
       trackingToken,
       createdAt: now,
       updatedAt: now
@@ -480,6 +537,15 @@ onAuthStateChanged(auth, (user) => {
     const userSnap = await get(ref(db, `users/${user.uid}`));
     const userData = userSnap.val() || {};
     currentUserProfile = userData;
+    if (customerWhatsappInput) {
+      customerWhatsappInput.value = userData.whatsapp ? String(userData.whatsapp) : '';
+    }
+    // Default instructions from profile to reduce friction at checkout.
+    const defaultInstr = userData?.deliveryPrefs?.defaultInstructions;
+    const notesEl = qs('deliveryNotes');
+    if (notesEl && !notesEl.value.trim() && defaultInstr) {
+      notesEl.value = String(defaultInstr).trim();
+    }
     deliveryAutocomplete.setSelectedFromStored({
       address: userData.address || '',
       lat: userData.geo?.lat,
