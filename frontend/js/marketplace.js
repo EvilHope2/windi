@@ -83,7 +83,7 @@ function merchantShippingFee(merchant) {
 }
 
 function merchantImage(merchant) {
-  return merchant.logoUrl || merchant.imageUrl || merchant.bannerUrl || '/icons/icon.svg';
+  return merchant.logoUrl || merchant.imageUrl || merchant.bannerUrl || '/icons/icon-192.png';
 }
 
 function parseScheduleRange(scheduleText) {
@@ -262,7 +262,7 @@ function renderProductCategories(entries) {
 }
 
 function productImage(product) {
-  return product.imageUrl || '/icons/icon.svg';
+  return product.imageUrl || '/icons/icon-192.png';
 }
 
 function renderMerchantProducts() {

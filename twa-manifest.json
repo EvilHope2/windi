@@ -13,16 +13,16 @@
   "backgroundColor": "#0F172A",
   "enableNotifications": true,
   "startUrl": "/",
-  "iconUrl": "https://windi-rg-121f8.web.app/icons/icon.svg",
-  "maskableIconUrl": "https://windi-rg-121f8.web.app/icons/icon.svg",
-  "monochromeIconUrl": "https://windi-rg-121f8.web.app/icons/icon.svg",
+  "iconUrl": "https://windi-rg-121f8.web.app/icons/icon-512.png",
+  "maskableIconUrl": "https://windi-rg-121f8.web.app/icons/icon-maskable-512.png",
+  "monochromeIconUrl": "https://windi-rg-121f8.web.app/icons/icon-512.png",
   "splashScreenFadeOutDuration": 300,
   "signingKey": {
     "path": "C:\\Users\\nahuy\\Desktop\\Empresa\\delirg\\delirg.keystore",
     "alias": "delirg"
   },
-  "appVersionName": "5",
-  "appVersionCode": 5,
+  "appVersionName": "6",
+  "appVersionCode": 6,
   "shortcuts": [],
   "generatorApp": "bubblewrap-cli",
   "webManifestUrl": "https://windi-rg-121f8.web.app/manifest.json",
@@ -48,5 +48,5 @@
   "fileHandlers": [],
   "launchHandlerClientMode": "",
   "displayOverride": [],
-  "appVersion": "5"
+  "appVersion": "6"
 }

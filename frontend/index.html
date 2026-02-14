@@ -6,6 +6,9 @@
   <title>Windi | Marketplace + Delivery en Rio Grande</title>
   <meta name="description" content="Pedi productos de comercios locales en una sola app y recibilos con delivery rapido y seguimiento en tiempo real." />
   <link rel="manifest" href="/manifest.json" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png" />
+  <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
+  <link rel="apple-touch-icon" href="/icons/icon-192.png" />
   <link rel="stylesheet" href="/styles.css" />
   <style>
     .landing-shell {
@@ -411,7 +414,10 @@
   <main class="landing-shell landing-fade">
     <header class="topbar">
       <div>
-        <div class="brand" style="font-size:26px; color: var(--windi-text-primary);">Windi</div>
+        <div class="brand" style="display:flex; align-items:center; gap:10px; font-size:26px; color: var(--windi-text-primary);">
+          <img src="/icons/favicon-32.png" alt="Windi" width="28" height="28" style="border-radius:10px; box-shadow: var(--windi-shadow-sm);" />
+          <span>Windi</span>
+        </div>
         <div class="muted">Marketplace + Delivery en Rio Grande</div>
       </div>
       <div class="top-actions">

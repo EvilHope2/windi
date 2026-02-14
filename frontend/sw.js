@@ -1,4 +1,4 @@
-const CACHE = 'delirg-v10';
+const CACHE = 'delirg-v11';
 const ASSETS = [
   '/',
   '/index.html',
@@ -24,6 +24,11 @@ const ASSETS = [
   '/aprobaciones.html',
   '/styles.css',
   '/manifest.json',
+  '/icons/favicon-32.png',
+  '/icons/icon-192.png',
+  '/icons/icon-512.png',
+  '/icons/icon-maskable-192.png',
+  '/icons/icon-maskable-512.png',
   '/js/firebase.js',
   '/js/utils.js',
   '/js/address-autocomplete.js',
