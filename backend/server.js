@@ -41,7 +41,7 @@ const DEFAULT_DELIVER_RADIUS_METERS = Number(process.env.DELIVERY_RADIUS_METERS 
 const DEFAULT_DELIVER_MAX_ACCURACY_METERS = Number(process.env.DELIVERY_MAX_ACCURACY_METERS || 50);
 
 let cachedGlobalConfig = { value: null, fetchedAt: 0 };
-let cachedPublicConfig = { value: null, fetchedAt: 0 };
+let cachedPublicConfig = { value: { mapboxToken: '', apkDownloadUrl: '' }, fetchedAt: 0 };
 
 async function getGlobalConfig() {
   const now = Date.now();
@@ -101,8 +101,9 @@ app.get('/public-config', (req, res) => {
   // Public token used by the frontend (Mapbox "pk.*"). Served from env to avoid committing it to git.
   (async () => {
     const envToken = String(MAPBOX_PUBLIC_TOKEN || MAPBOX_TOKEN || '').trim();
+    const envApkUrl = String(process.env.APK_DOWNLOAD_URL || '').trim();
     if (envToken) {
-      return res.json({ mapboxToken: envToken });
+      return res.json({ mapboxToken: envToken, apkDownloadUrl: envApkUrl });
     }
 
     // Fallback: allow setting the public token in RTDB (useful when env vars are not applied/redeployed yet).
@@ -110,18 +111,22 @@ app.get('/public-config', (req, res) => {
     try {
       const now = Date.now();
       if (cachedPublicConfig.value && now - cachedPublicConfig.fetchedAt < 300_000) {
-        return res.json({ mapboxToken: cachedPublicConfig.value });
+        return res.json({
+          mapboxToken: String(cachedPublicConfig.value.mapboxToken || '').trim(),
+          apkDownloadUrl: String(cachedPublicConfig.value.apkDownloadUrl || '').trim() || envApkUrl
+        });
       }
       if (!serviceAccount) {
-        cachedPublicConfig = { value: '', fetchedAt: now };
-        return res.json({ mapboxToken: '' });
+        cachedPublicConfig = { value: { mapboxToken: '', apkDownloadUrl: '' }, fetchedAt: now };
+        return res.json({ mapboxToken: '', apkDownloadUrl: envApkUrl });
       }
       const snap = await admin.database().ref('config/public').get();
       const token = String((snap.val() || {})?.mapboxToken || '').trim();
-      cachedPublicConfig = { value: token, fetchedAt: now };
-      return res.json({ mapboxToken: token });
+      const apkUrl = String((snap.val() || {})?.apkDownloadUrl || '').trim();
+      cachedPublicConfig = { value: { mapboxToken: token, apkDownloadUrl: apkUrl }, fetchedAt: now };
+      return res.json({ mapboxToken: token, apkDownloadUrl: apkUrl || envApkUrl });
     } catch {
-      return res.json({ mapboxToken: '' });
+      return res.json({ mapboxToken: '', apkDownloadUrl: envApkUrl });
     }
   })();
 });

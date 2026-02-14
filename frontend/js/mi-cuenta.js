@@ -18,7 +18,8 @@ import { qs } from './utils.js';
 import { attachRioGrandeAutocomplete } from './address-autocomplete.js';
 import { getMapboxToken } from './mapbox-token.js';
 
-const RIO_GRANDE_BBOX = [-68.0, -54.15, -67.25, -53.55];
+// Keep consistent with the shared autocomplete bbox to avoid rejecting edge addresses.
+const RIO_GRANDE_BBOX = [-68.2, -54.05, -67.35, -53.6];
 const RIO_GRANDE_CENTER = [-67.7095, -53.787];
 const SUPPORT_WA = '5492964537272';
 
@@ -161,8 +162,13 @@ function renderAddresses(profile) {
       <div class="empty-state">
         <div class="empty-title">Todavia no tenes direcciones</div>
         <div class="empty-sub">Agrega tu direccion para poder pedir en Windi.</div>
+        <div class="row" style="margin-top:12px;">
+          <button id="emptyAddAddressBtn" type="button">Agregar direccion</button>
+        </div>
       </div>
     `;
+    const btn = qs('emptyAddAddressBtn');
+    if (btn) btn.addEventListener('click', () => openAddressEditor(null).catch((err) => setStatus(err.message)));
     return;
   }
 
@@ -280,7 +286,13 @@ async function openAddressEditor(addr) {
     addressAutocomplete = attachRioGrandeAutocomplete(addressInput, {
       onSelect: async (selected) => {
         if (selected && selected.lng != null && selected.lat != null) {
-          await setMapPoint([Number(selected.lng), Number(selected.lat)]);
+          // Map is best-effort: the address selection should still work even if map fails.
+          try { await setMapPoint([Number(selected.lng), Number(selected.lat)]); } catch {}
+          if (selected.approximate) {
+            setStatus('No encontramos la altura exacta para esta calle. Ajusta el pin para ubicar tu casa.');
+          } else {
+            setStatus('');
+          }
         } else {
           selectedCoords = null;
         }
@@ -299,14 +311,21 @@ async function openAddressEditor(addr) {
     city: 'Rio Grande'
   });
 
-  await ensureMap();
-  if (addr?.lng != null && addr?.lat != null) {
-    await setMapPoint([Number(addr.lng), Number(addr.lat)]);
-  } else {
-    selectedCoords = null;
-  }
-
   openEditorUi();
+  setTimeout(() => { try { addressInput?.focus(); } catch {} }, 0);
+
+  // Map load is best-effort. Even if Mapbox is missing/misconfigured, the user should be able to type/select.
+  try {
+    await ensureMap();
+    if (addr?.lng != null && addr?.lat != null) {
+      await setMapPoint([Number(addr.lng), Number(addr.lat)]);
+    } else {
+      selectedCoords = null;
+    }
+  } catch (err) {
+    selectedCoords = null;
+    setStatus(err?.message || 'No se pudo cargar el mapa. Igualmente podes buscar la direccion.');
+  }
 }
 
 async function setPrimaryAddress(addr) {
@@ -584,10 +603,11 @@ onAuthStateChanged(auth, async (user) => {
     renderPrefs(profile);
     refreshNotifyUi(profile);
 
-    // If there's a single legacy address, show it as primary in editor defaults.
-    // Map only initializes when opening editor (performance).
+    // UX: if user has no addresses yet, open the editor automatically to avoid confusion.
+    if (!getUserAddresses(profile).length) {
+      openAddressEditor(null).catch(() => {});
+    }
   } catch (err) {
     setStatus(err.message);
   }
 });
-

@@ -70,7 +70,8 @@ let originAddressAc = null;
 let destinationAddressAc = null;
 let merchantProfile = null;
 
-const RIO_GRANDE_BBOX = [-68.0, -54.15, -67.25, -53.55];
+// Keep consistent with the address autocomplete bbox to avoid rejecting valid selections.
+const RIO_GRANDE_BBOX = [-68.2, -54.05, -67.35, -53.6];
 const RIO_GRANDE_CENTER = [-67.7095, -53.787];
 const RIO_GRANDE_RADIUS_KM = 45;
 

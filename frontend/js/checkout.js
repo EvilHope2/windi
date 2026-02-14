@@ -9,7 +9,8 @@ import { getMapboxToken } from './mapbox-token.js';
 const DEFAULT_DELIVERY_BASE_FEE = 1500;
 const DEFAULT_DELIVERY_PER_KM = 500;
 const DEFAULT_COURIER_COMMISSION_RATE = 0.15;
-const RIO_GRANDE_BBOX = [-68.0, -54.15, -67.25, -53.55];
+// Keep consistent with the shared autocomplete bbox to avoid rejecting edge addresses.
+const RIO_GRANDE_BBOX = [-68.2, -54.05, -67.35, -53.6];
 const BACKEND_BASE_URL = 'https://windi-01ia.onrender.com';
 
 const summary = qs('summary');
@@ -29,6 +30,16 @@ let quoteErrorMessage = '';
 
 function setStatus(msg) { statusEl.textContent = msg || ''; }
 function setShippingHint(msg) { if (shippingHint) shippingHint.textContent = msg || ''; }
+
+async function fetchWithTimeout(url, { timeoutMs = 8000, ...opts } = {}) {
+  const controller = new AbortController();
+  const t = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...opts, signal: controller.signal });
+  } finally {
+    clearTimeout(t);
+  }
+}
 
 function normalizeArWhatsApp(raw) {
   const digits = String(raw || '').replace(/\D/g, '');
@@ -60,6 +71,24 @@ function computeCourierCommission(deliveryFee, rate = DEFAULT_COURIER_COMMISSION
     courierCommissionAmount: commission,
     courierPayout: Math.round(fee - commission)
   };
+}
+
+function haversineKm(a, b) {
+  if (!Array.isArray(a) || !Array.isArray(b) || a.length < 2 || b.length < 2) return null;
+  const lng1 = Number(a[0]);
+  const lat1 = Number(a[1]);
+  const lng2 = Number(b[0]);
+  const lat2 = Number(b[1]);
+  if (![lng1, lat1, lng2, lat2].every(Number.isFinite)) return null;
+  const R = 6371; // km
+  const toRad = (v) => (v * Math.PI) / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLng = toRad(lng2 - lng1);
+  const s1 = Math.sin(dLat / 2);
+  const s2 = Math.sin(dLng / 2);
+  const aa = s1 * s1 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * s2 * s2;
+  const c = 2 * Math.atan2(Math.sqrt(aa), Math.sqrt(1 - aa));
+  return R * c;
 }
 
 function pointInRioGrandeBBox(coords) {
@@ -122,12 +151,49 @@ function getSelectedCoords() {
   return [lng, lat];
 }
 
+async function loadPrimaryAddressForUser(uid) {
+  if (!uid) return null;
+  const userSnap = await get(ref(db, `users/${uid}`));
+  const userData = userSnap.val() || {};
+
+  // New model: address book
+  let primary = null;
+  try {
+    const addrSnap = await get(ref(db, `users/${uid}/addresses`));
+    const addresses = addrSnap.val() || {};
+    const ids = Object.keys(addresses || {});
+    if (ids.length) {
+      const primaryId = (userData.primaryAddressId || '').toString();
+      primary = primaryId && addresses[primaryId] ? addresses[primaryId] : addresses[ids[0]];
+    }
+  } catch {
+    // ignore and fall back to legacy
+  }
+
+  // Legacy: single address
+  if (!primary) {
+    primary = {
+      address: userData.address || '',
+      lat: userData.geo?.lat,
+      lng: userData.geo?.lng,
+      city: userData.city || 'Rio Grande'
+    };
+  }
+
+  const addrText = String(primary?.address || '').trim();
+  const lat = Number(primary?.lat);
+  const lng = Number(primary?.lng);
+  if (!addrText || !Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+
+  return { address: addrText, lat, lng, city: 'Rio Grande' };
+}
+
 async function geocode(address) {
   const token = await getMapboxToken();
   if (!token) throw new Error('Mapbox no configurado.');
   const query = `${address}, Rio Grande, Tierra del Fuego, Argentina`;
   const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${token}&limit=5&bbox=${RIO_GRANDE_BBOX.join(',')}&country=AR&types=address,poi`;
-  const res = await fetch(url);
+  const res = await fetchWithTimeout(url, { timeoutMs: 8000 });
   if (!res.ok) throw new Error('No se pudo geocodificar la direccion.');
   const data = await res.json();
   const features = Array.isArray(data.features) ? data.features : [];
@@ -142,7 +208,7 @@ async function routeDistanceKm(origin, destination) {
   const profiles = ['driving', 'walking'];
   for (const profile of profiles) {
     const url = `https://api.mapbox.com/directions/v5/mapbox/${profile}/${origin[0]},${origin[1]};${destination[0]},${destination[1]}?access_token=${token}&overview=false`;
-    const res = await fetch(url);
+    const res = await fetchWithTimeout(url, { timeoutMs: 9000 });
     if (!res.ok) continue;
     const data = await res.json();
     const route = data.routes && data.routes[0];
@@ -156,6 +222,7 @@ async function quoteDeliveryFee(cart, customerCoords, customerAddress) {
     return {
       km: null,
       fee: DEFAULT_DELIVERY_BASE_FEE,
+      kmMode: 'base',
       merchantCoords: null,
       customerCoords: null
     };
@@ -175,18 +242,27 @@ async function quoteDeliveryFee(cart, customerCoords, customerAddress) {
   const perKm = Number(merchant.deliveryPerKm || DEFAULT_DELIVERY_PER_KM);
   const baseFee = Number(merchant.deliveryBaseFee || DEFAULT_DELIVERY_BASE_FEE);
   let roundedKm = null;
+  let kmMode = 'directions';
   try {
     const km = await routeDistanceKm(merchantCoords, customerCoords);
     roundedKm = Math.round(km * 10) / 10;
   } catch (err) {
-    // If routing fails (e.g. Mapbox returns no route), we still allow checkout using base fee.
-    roundedKm = null;
+    // If routing fails (e.g. Mapbox returns no route), fall back to straight-line distance estimate.
+    const approx = haversineKm(merchantCoords, customerCoords);
+    if (approx != null && approx > 0) {
+      roundedKm = Math.round(approx * 10) / 10;
+      kmMode = 'haversine';
+    } else {
+      roundedKm = null;
+      kmMode = 'base';
+    }
   }
   const fee = Math.round(baseFee + (roundedKm == null ? 0 : roundedKm) * perKm);
 
   return {
     km: roundedKm,
     fee,
+    kmMode,
     merchantCoords: { lng: merchantCoords[0], lat: merchantCoords[1] },
     customerCoords: { lng: customerCoords[0], lat: customerCoords[1] },
     merchantAddress: merchant.address || null,
@@ -240,7 +316,9 @@ function buildSummary() {
   } else if (quoteState === 'error') {
     setShippingHint(quoteErrorMessage || 'No se pudo calcular el envio.');
   } else if (lastQuote?.km == null) {
-    setShippingHint('No se pudo calcular la ruta exacta. Se usara tarifa base.');
+    setShippingHint('No se pudo calcular la distancia. Se usara tarifa base.');
+  } else if (lastQuote?.kmMode === 'haversine') {
+    setShippingHint(`Distancia estimada: ${lastQuote.km} km (sin ruta por calles)`);
   } else if (lastQuote?.km != null) {
     setShippingHint(`Envio calculado automaticamente: ${lastQuote.km} km`);
   }
@@ -320,12 +398,22 @@ async function recalculateQuote() {
     quoteState = 'loading';
     quoteErrorMessage = '';
     buildSummary();
-    lastQuote = await quoteDeliveryFee(cart, coords, selected.address);
+    lastQuote = await Promise.race([
+      quoteDeliveryFee(cart, coords, selected.address),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout calculando envio.')), 12000))
+    ]);
     quoteState = 'ok';
     buildSummary();
     setStatus('');
   } catch (err) {
-    lastQuote = null;
+    // If quoting fails, keep checkout usable with base fee (and show a clear hint).
+    lastQuote = {
+      km: null,
+      fee: DEFAULT_DELIVERY_BASE_FEE,
+      kmMode: 'base',
+      merchantCoords: null,
+      customerCoords: { lng: coords[0], lat: coords[1] }
+    };
     quoteState = 'error';
     quoteErrorMessage = `No se pudo calcular envio exacto (${err.message}).`;
     buildSummary();
@@ -434,6 +522,7 @@ qs('checkoutForm').addEventListener('submit', async (e) => {
         merchantLocation: lastQuote.merchantCoords || null,
         customerLocation: { lng: Number(selected.lng), lat: Number(selected.lat) },
         distanceKm: lastQuote.km,
+        distanceKmMode: lastQuote.kmMode || null,
         deliveryBaseFee: lastQuote.deliveryBaseFee || DEFAULT_DELIVERY_BASE_FEE,
         deliveryPerKm: lastQuote.deliveryPerKm || DEFAULT_DELIVERY_PER_KM
       },
@@ -546,18 +635,15 @@ onAuthStateChanged(auth, (user) => {
     if (notesEl && !notesEl.value.trim() && defaultInstr) {
       notesEl.value = String(defaultInstr).trim();
     }
-    deliveryAutocomplete.setSelectedFromStored({
-      address: userData.address || '',
-      lat: userData.geo?.lat,
-      lng: userData.geo?.lng,
-      city: 'Rio Grande'
-    });
+
+    const primaryAddr = await loadPrimaryAddressForUser(user.uid);
+    deliveryAutocomplete.setSelectedFromStored(primaryAddr || { address: '', lat: null, lng: null, city: 'Rio Grande' });
 
     if (!deliveryAutocomplete.isSelectionValid()) {
       lastQuote = null;
       quoteState = 'idle';
       quoteErrorMessage = '';
-      setShippingHint('Selecciona una direccion de entrega para calcular envio.');
+      setShippingHint('Agrega una direccion en Mi Cuenta (con mapa) o selecciona una sugerencia para continuar.');
       setStatus('Selecciona una direccion de la lista para continuar.');
       buildSummary();
       return;

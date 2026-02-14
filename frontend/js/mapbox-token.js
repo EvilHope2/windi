@@ -1,6 +1,9 @@
 const BACKEND_BASE_URL = 'https://windi-01ia.onrender.com';
 
-let cached = null;
+let cachedToken = null;
+let cachedAt = 0;
+const EMPTY_TTL_MS = 15_000; // retry soon if backend was missing token
+const TOKEN_TTL_MS = 24 * 60 * 60_000;
 
 function readRuntimeToken() {
   try {
@@ -20,23 +23,31 @@ function readRuntimeToken() {
 }
 
 export async function getMapboxToken() {
-  if (cached !== null) return cached;
+  const now = Date.now();
+  if (cachedToken !== null) {
+    const ttl = cachedToken ? TOKEN_TTL_MS : EMPTY_TTL_MS;
+    if (now - cachedAt < ttl) return cachedToken;
+    // expired, refetch
+  }
 
   const runtime = readRuntimeToken();
   if (runtime) {
-    cached = runtime;
-    return cached;
+    cachedToken = runtime;
+    cachedAt = now;
+    return cachedToken;
   }
 
   try {
     const r = await fetch(`${BACKEND_BASE_URL}/public-config`, { cache: 'no-store' });
     const j = await r.json();
     const token = String(j?.mapboxToken || j?.mapboxPublicToken || '').trim();
-    cached = token || '';
-    return cached;
+    cachedToken = token || '';
+    cachedAt = now;
+    return cachedToken;
   } catch (_) {
-    cached = '';
-    return cached;
+    cachedToken = '';
+    cachedAt = now;
+    return cachedToken;
   }
 }
 

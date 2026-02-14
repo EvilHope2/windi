@@ -417,6 +417,7 @@
       <div class="top-actions">
         <a class="cta-btn cta-secondary" href="/comercio.html">Comercio</a>
         <a class="cta-btn cta-secondary" href="/repartidor.html">Repartidor</a>
+        <a id="downloadApkTop" class="cta-btn cta-secondary" href="#" download style="display:none;">Descargar APK</a>
       </div>
     </header>
 
@@ -430,6 +431,7 @@
         <div class="hero-actions">
           <a id="heroPrimaryCta" class="cta-btn cta-primary" href="/marketplace-auth">Comprar ahora</a>
           <a id="heroSecondaryCta" class="cta-btn cta-secondary" href="/marketplace-auth">Explorar comercios</a>
+          <a id="downloadApkHero" class="cta-btn cta-secondary" href="#" download style="display:none;">Descargar app (APK)</a>
         </div>
 
         <div class="hero-badges">
@@ -598,6 +600,35 @@
         el.setAttribute('href', href);
       });
     }
+
+    const downloadApkTop = document.getElementById('downloadApkTop');
+    const downloadApkHero = document.getElementById('downloadApkHero');
+    const ua = (navigator.userAgent || '').toLowerCase();
+    const isAndroid = ua.includes('android');
+
+    async function applyApkDownloadUrl() {
+      if (!downloadApkTop && !downloadApkHero) return;
+      if (!isAndroid) return;
+      const BACKEND_BASE_URL = 'https://windi-01ia.onrender.com';
+      try {
+        const r = await fetch(`${BACKEND_BASE_URL}/public-config`, { cache: 'no-store' });
+        const j = await r.json().catch(() => ({}));
+        const apkUrl = String(j?.apkDownloadUrl || '').trim();
+        if (!apkUrl) return;
+        if (downloadApkTop) {
+          downloadApkTop.href = apkUrl;
+          downloadApkTop.style.display = '';
+        }
+        if (downloadApkHero) {
+          downloadApkHero.href = apkUrl;
+          downloadApkHero.style.display = '';
+        }
+      } catch {
+        // keep hidden
+      }
+    }
+
+    applyApkDownloadUrl();
 
     onAuthStateChanged(auth, (user) => {
       applyCtaTarget(!!user);
