@@ -624,6 +624,15 @@ qs('pedidoForm').addEventListener('submit', async (e) => {
 async function cancelarPedido(id, token) {
   const now = Date.now();
   try {
+    // Anti-fraude: prevent cancel after courier picked up.
+    const snap = await get(ref(db, `orders/${id}`));
+    const current = snap.val();
+    if (!current) throw new Error('Pedido no encontrado.');
+    const estado = (current.estado || '').toString().toLowerCase();
+    const nonCancellable = estado === 'en-camino' || estado === 'entregado' || estado === 'en-camino-retiro';
+    if (nonCancellable || current.pickedUpAt) {
+      throw new Error('No se puede cancelar: el repartidor ya retiro el pedido.');
+    }
     await update(ref(db, `orders/${id}`), {
       estado: 'cancelado',
       canceledAt: now,
@@ -633,6 +642,18 @@ async function cancelarPedido(id, token) {
       estado: 'cancelado',
       updatedAt: now
     });
+    if (current?.marketplaceOrderId) {
+      await update(ref(db, `marketplaceOrders/${current.marketplaceOrderId}`), {
+        orderStatus: 'cancelled',
+        updatedAt: now
+      });
+      await set(push(ref(db, `marketplaceOrderStatusLog/${current.marketplaceOrderId}`)), {
+        status: 'cancelled',
+        actorId: auth.currentUser.uid,
+        actorRole: 'comercio',
+        createdAt: now
+      });
+    }
     setStatus('Pedido cancelado.');
   } catch (err) {
     setStatus(err.message);
@@ -760,8 +781,19 @@ function renderPedidos(data) {
         actionsRow.appendChild(msg);
       }
 
-      // Always allow cancel while not closed.
-      addBtn('Cancelar', 'cancelar', 'danger');
+      // Cancel: only before courier pickup to reduce fraud/abuse.
+      const canCancel = !p.pickedUpAt
+        && estado !== 'en-camino'
+        && estado !== 'entregado'
+        && estado !== 'en-camino-retiro';
+      if (canCancel) {
+        addBtn('Cancelar', 'cancelar', 'danger');
+      } else {
+        const warn = document.createElement('div');
+        warn.className = 'muted';
+        warn.textContent = 'Cancelacion bloqueada: el pedido ya fue retirado por el repartidor.';
+        actionsRow.appendChild(warn);
+      }
 
       actionsRow.addEventListener('click', async (e) => {
         const btn = e.target && e.target.closest ? e.target.closest('button[data-action]') : null;

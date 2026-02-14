@@ -14,8 +14,10 @@
       }
     },
     "orders": {
-      ".read": "auth != null",
-      ".write": "auth != null",
+      "$orderId": {
+        ".read": "auth != null && (root.child('admins/' + auth.uid).val() == true || data.child('comercioId').val() == auth.uid || data.child('repartidorId').val() == auth.uid || data.child('customerId').val() == auth.uid || (root.child('users/' + auth.uid + '/role').val() == 'repartidor' && data.child('estado').val() == 'buscando' && !data.child('repartidorId').exists()))",
+        ".write": "auth != null && (root.child('admins/' + auth.uid).val() == true || (!data.exists() && newData.child('customerId').val() == auth.uid && newData.child('comercioId').isString() && newData.child('trackingToken').isString()) || (data.exists() && data.child('comercioId').val() == auth.uid && root.child('users/' + auth.uid + '/role').val() == 'comercio' && (root.child('users/' + auth.uid + '/status').val() == 'activo' || root.child('users/' + auth.uid + '/status').val() == 'active') && (newData.child('estado').val() == data.child('estado').val() || (data.child('estado').val() == 'esperando-comercio' && (newData.child('estado').val() == 'preparando' || newData.child('estado').val() == 'listo-para-retirar' || (newData.child('estado').val() == 'cancelado' && !data.child('repartidorId').exists()))) || (data.child('estado').val() == 'preparando' && (newData.child('estado').val() == 'listo-para-retirar' || (newData.child('estado').val() == 'cancelado' && !data.child('repartidorId').exists()))) || (data.child('estado').val() == 'listo-para-retirar' && (newData.child('estado').val() == 'buscando' || (newData.child('estado').val() == 'cancelado' && !data.child('repartidorId').exists()))) || (data.child('estado').val() == 'buscando' && (newData.child('estado').val() == 'cancelado' && !data.child('repartidorId').exists())))) || (data.exists() && root.child('users/' + auth.uid + '/role').val() == 'repartidor' && data.child('estado').val() == 'buscando' && !data.child('repartidorId').exists() && newData.child('repartidorId').val() == auth.uid && newData.child('estado').val() == 'en-camino-retiro'))"
+      },
       ".indexOn": ["comercioId", "estado", "repartidorId", "trackingToken"]
     },
     "merchants": {
