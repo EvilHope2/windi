@@ -41,6 +41,7 @@ const DEFAULT_DELIVER_RADIUS_METERS = Number(process.env.DELIVERY_RADIUS_METERS 
 const DEFAULT_DELIVER_MAX_ACCURACY_METERS = Number(process.env.DELIVERY_MAX_ACCURACY_METERS || 50);
 
 let cachedGlobalConfig = { value: null, fetchedAt: 0 };
+let cachedPublicConfig = { value: null, fetchedAt: 0 };
 
 async function getGlobalConfig() {
   const now = Date.now();
@@ -98,9 +99,31 @@ async function adminLog(actorUid, action, payload) {
 
 app.get('/public-config', (req, res) => {
   // Public token used by the frontend (Mapbox "pk.*"). Served from env to avoid committing it to git.
-  return res.json({
-    mapboxToken: String(MAPBOX_PUBLIC_TOKEN || MAPBOX_TOKEN || '').trim()
-  });
+  (async () => {
+    const envToken = String(MAPBOX_PUBLIC_TOKEN || MAPBOX_TOKEN || '').trim();
+    if (envToken) {
+      return res.json({ mapboxToken: envToken });
+    }
+
+    // Fallback: allow setting the public token in RTDB (useful when env vars are not applied/redeployed yet).
+    // This is safe because Mapbox pk.* tokens are public by design.
+    try {
+      const now = Date.now();
+      if (cachedPublicConfig.value && now - cachedPublicConfig.fetchedAt < 300_000) {
+        return res.json({ mapboxToken: cachedPublicConfig.value });
+      }
+      if (!serviceAccount) {
+        cachedPublicConfig = { value: '', fetchedAt: now };
+        return res.json({ mapboxToken: '' });
+      }
+      const snap = await admin.database().ref('config/public').get();
+      const token = String((snap.val() || {})?.mapboxToken || '').trim();
+      cachedPublicConfig = { value: token, fetchedAt: now };
+      return res.json({ mapboxToken: token });
+    } catch {
+      return res.json({ mapboxToken: '' });
+    }
+  })();
 });
 
 async function verifyFirebaseToken(req) {
