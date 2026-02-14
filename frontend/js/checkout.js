@@ -424,8 +424,9 @@ async function recalculateQuote() {
       merchantCoords: null,
       customerCoords: { lng: coords[0], lat: coords[1] }
     };
-    quoteState = 'error';
-    quoteErrorMessage = `No se pudo calcular envio exacto (${err.message}).`;
+    // Treat as OK so we don't block checkout; the UI will show a softer hint for kmMode=base.
+    quoteState = 'ok';
+    quoteErrorMessage = '';
     buildSummary();
     setStatus('');
   }

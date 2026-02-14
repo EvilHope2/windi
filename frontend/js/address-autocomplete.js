@@ -235,8 +235,8 @@ export function attachRioGrandeAutocomplete(input, { minChars = 2, limit = 8, on
       main.appendChild(sub);
       row.appendChild(main);
 
-      row.addEventListener('mousedown', async (e) => {
-        e.preventDefault();
+      const handlePick = async (e) => {
+        if (e && e.preventDefault) e.preventDefault();
         let chosen = f;
         if (!chosen.center || !Number.isFinite(Number(chosen.center[0])) || !Number.isFinite(Number(chosen.center[1]))) {
           const typedRaw = overrideAddress || chosen.place_name || input.value || '';
@@ -261,7 +261,11 @@ export function attachRioGrandeAutocomplete(input, { minChars = 2, limit = 8, on
           invalidateSelection();
         }
         list.classList.add('hidden');
-      });
+      };
+
+      // Touch/TWA: click/pointer events are more reliable than mousedown.
+      row.addEventListener('pointerdown', handlePick);
+      row.addEventListener('click', handlePick);
       list.appendChild(row);
     });
 
