@@ -53,6 +53,12 @@
         }
       }
     },
+    "orderPins": {
+      "$orderId": {
+        ".read": "auth != null && (root.child('admins/' + auth.uid).val() == true || root.child('marketplaceOrders/' + $orderId + '/customerId').val() == auth.uid)",
+        ".write": "auth != null && (root.child('admins/' + auth.uid).val() == true || (!data.exists() && root.child('marketplaceOrders/' + $orderId + '/customerId').val() == auth.uid && newData.child('code').isString() && newData.child('code').val().matches(/^\\d{4}$/)))"
+      }
+    },
     "publicTracking": {
       ".read": true,
       ".write": "auth != null"

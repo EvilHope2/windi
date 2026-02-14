@@ -1,5 +1,6 @@
-﻿import { db } from './firebase.js';
-import { ref, onValue } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-database.js';
+import { auth, db } from './firebase.js';
+import { onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js';
+import { ref, onValue, get } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-database.js';
 import { qs, fmtMoney, fmtTime } from './utils.js';
 
 const detail = qs('orderDetail');
@@ -9,6 +10,9 @@ const idFromPath = pathParts[0] === 'orders' && pathParts[1] ? pathParts[1] : nu
 const id = idFromPath || new URLSearchParams(location.search).get('id');
 
 function setStatus(msg) { statusEl.textContent = msg || ''; }
+
+let currentUid = null;
+onAuthStateChanged(auth, (u) => { currentUid = u ? u.uid : null; });
 
 function stepperModel(status) {
   const s = String(status || 'created');
@@ -42,7 +46,7 @@ function renderStepper(status) {
   const activeIdx = steps.findIndex((x) => x.key === active);
   const html = steps.map((st, i) => {
     const cls = i < activeIdx ? 'done' : (i === activeIdx ? 'active' : '');
-    const num = i < activeIdx ? '✓' : String(i + 1);
+    const num = i < activeIdx ? '?' : String(i + 1);
     return `
       <div class="step ${cls}">
         <div class="dot">${num}</div>
@@ -61,11 +65,29 @@ function renderStatusLog(orderId) {
     const logs = snap.val() || {};
     const entries = Object.values(logs).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
     const logHtml = entries.length
-      ? entries.map((entry) => `<li>${entry.status} · ${fmtTime(entry.createdAt)} · ${entry.actorRole || 'system'}</li>`).join('')
+      ? entries.map((entry) => `<li>${entry.status} ? ${fmtTime(entry.createdAt)} ? ${entry.actorRole || 'system'}</li>`).join('')
       : '<li>Sin movimientos aun.</li>';
     const list = qs('orderStatusHistory');
     if (list) list.innerHTML = logHtml;
   }, (err) => setStatus(err.message));
+}
+
+let pinLoaded = false;
+
+async function loadPinOnce(orderId) {
+  if (pinLoaded) return;
+  pinLoaded = true;
+  try {
+    const pinSnap = await get(ref(db, `orderPins/${orderId}`));
+    const pin = pinSnap.val() || {};
+    const code = String(pin.code || '').trim();
+    const box = qs('pinBox');
+    if (box) {
+      box.innerHTML = `Codigo de entrega: <strong>${code ? code : '----'}</strong>`;
+    }
+  } catch {
+    // ignore
+  }
 }
 
 if (!id) {
@@ -77,15 +99,19 @@ if (!id) {
       detail.innerHTML = '<div class="muted">Pedido no encontrado.</div>';
       return;
     }
+
     const trackUrl = o.delivery?.trackingToken ? `${location.origin}/tracking.html?t=${encodeURIComponent(o.delivery.trackingToken)}` : '';
     const status = String(o.orderStatus || 'created');
     const paymentStatus = String(o.paymentStatus || '');
     const canPayNow = String(o.paymentMethod || '') === 'mp_card' && paymentStatus === 'pending' && o.mpCheckoutUrl;
+    const canSeePin = !!(currentUid && String(o.customerId || '') === String(currentUid));
+
     const pillClass =
       status === 'delivered' ? 'good' :
       status === 'cancelled' ? 'bad' :
       status === 'preparing' || status === 'ready_for_pickup' || status === 'assigned' || status === 'picked_up' ? 'info' :
       'warn';
+
     detail.innerHTML = `
       <div class="title-row"><span class="icon">P</span><h2>Pedido ${id}</h2></div>
       <div class="list-card" style="margin-top:10px;">
@@ -107,6 +133,7 @@ if (!id) {
         <div class="muted">Envio: <strong>${fmtMoney(o.deliveryFee)}</strong></div>
         <div class="muted">Total: <strong>${fmtMoney(o.total)}</strong></div>
         <div class="muted">Pago: <strong>${paymentStatus || '-'}</strong></div>
+        ${canSeePin ? `<div id="pinBox" class="muted" style="margin-top:10px;">Codigo de entrega: <strong>----</strong></div><div class="muted" style="font-size:12px;">Mostralo al repartidor al recibir. No lo compartas por chat.</div>` : ''}
         ${canPayNow ? `<div class="row" style="margin-top:12px;"><button id="payNowBtn" type="button">Pagar ahora (Mercado Pago)</button></div>` : ''}
       </div>
 
@@ -115,12 +142,18 @@ if (!id) {
         <ul id="orderStatusHistory" class="muted" style="margin:8px 0 0; padding-left:18px;"></ul>
       </div>
     `;
+
     const payBtn = qs('payNowBtn');
     if (payBtn && o.mpCheckoutUrl) {
       payBtn.addEventListener('click', () => {
         window.location.href = o.mpCheckoutUrl;
       });
     }
+
     renderStatusLog(id);
+
+    if (canSeePin) {
+      loadPinOnce(id).catch(() => {});
+    }
   }, (err) => setStatus(err.message));
 }

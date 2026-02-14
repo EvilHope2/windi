@@ -1019,7 +1019,7 @@ if (markPickedUpBtn) {
   markPickedUpBtn.addEventListener('click', markPickedUp);
 }
 
-async function deliverWithServerValidation(orderId) {
+async function deliverWithServerValidation(orderId, deliveryPin) {
   const user = auth.currentUser;
   if (!user) throw new Error('Debes iniciar sesion.');
   if (!currentPosition) throw new Error('GPS no disponible.');
@@ -1034,7 +1034,8 @@ async function deliverWithServerValidation(orderId) {
       lat: Number(currentPosition.lat),
       lng: Number(currentPosition.lng),
       accuracy: Number(currentPosition.accuracy || 9999),
-      timestamp: Number(currentPosition.timestamp || Date.now())
+      timestamp: Number(currentPosition.timestamp || Date.now()),
+      deliveryPin: String(deliveryPin || '')
     })
   });
   const data = await res.json().catch(() => ({}));
@@ -1049,8 +1050,15 @@ async function markDelivered() {
   if (!activeOrder) return setStatus('No hay pedido activo.');
   const eligibility = canDeliverActiveOrder();
   if (!eligibility.ok) return setStatus(eligibility.reason);
+  let deliveryPin = '';
+  if (activeOrder.marketplaceOrderId) {
+    const pin = window.prompt('Codigo de entrega (4 digitos):', '');
+    const code = String(pin || '').trim();
+    if (!/^\d{4}$/.test(code)) return setStatus('Codigo invalido. Debe tener 4 digitos.');
+    deliveryPin = code;
+  }
   try {
-    await deliverWithServerValidation(activeOrder.id);
+    await deliverWithServerValidation(activeOrder.id, deliveryPin);
     setActiveOrder(null, null);
     setStatus('Pedido entregado.');
   } catch (err) {

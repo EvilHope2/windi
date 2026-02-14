@@ -383,6 +383,7 @@ app.post('/courier/orders/:orderId/deliver', async (req, res) => {
     const lng = Number(req.body?.lng);
     const accuracy = Number(req.body?.accuracy);
     const gpsTimestamp = Number(req.body?.timestamp || Date.now());
+    const deliveryPin = String(req.body?.deliveryPin || '').trim();
     if (!orderId) return res.status(400).json({ error: 'orderId requerido' });
     if (![lat, lng, accuracy, gpsTimestamp].every(Number.isFinite)) {
       return res.status(400).json({ error: 'Ubicacion invalida.' });
@@ -413,6 +414,24 @@ app.post('/courier/orders/:orderId/deliver', async (req, res) => {
       }
     }
     if (!destination) return res.status(400).json({ error: 'Pedido sin coordenadas de destino.' });
+
+    // Delivery PIN validation (anti-fraude). Pin is stored in a separate node readable only by the customer/admin.
+    if (order.marketplaceOrderId) {
+      const pinRef = admin.database().ref(`orderPins/${order.marketplaceOrderId}`);
+      const pinSnap = await pinRef.get();
+      const pin = pinSnap.val() || null;
+      const code = String(pin?.code || '').trim();
+      if (code) {
+        if (!/^\d{4}$/.test(deliveryPin)) {
+          return res.status(400).json({ error: 'Codigo de entrega requerido (4 digitos).' });
+        }
+        if (deliveryPin !== code) {
+          return res.status(400).json({ error: 'Codigo de entrega incorrecto.' });
+        }
+        // Mark as used and remove the code for safety.
+        await pinRef.update({ usedAt: Date.now(), usedBy: decoded.uid, code: null });
+      }
+    }
 
     const courierLocation = { lat, lng };
     const distanceMeters = haversineMeters(courierLocation, destination);
@@ -483,7 +502,8 @@ app.post('/courier/orders/:orderId/deliver', async (req, res) => {
         accuracy,
         timestamp: gpsTimestamp,
         validatedAt: now,
-        distanceMeters: Math.round(distanceMeters)
+        distanceMeters: Math.round(distanceMeters),
+        pinVerified: order.marketplaceOrderId ? true : false
       }
     });
 

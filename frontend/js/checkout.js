@@ -73,6 +73,16 @@ function computeCourierCommission(deliveryFee, rate = DEFAULT_COURIER_COMMISSION
   };
 }
 
+function generateDeliveryPin4() {
+  // 4-digit numeric code. Keep as string to preserve leading zeros if any.
+  const arr = new Uint32Array(1);
+  if (window.crypto && window.crypto.getRandomValues) {
+    window.crypto.getRandomValues(arr);
+    return String(arr[0] % 10000).padStart(4, '0');
+  }
+  return String(Math.floor(Math.random() * 10000)).padStart(4, '0');
+}
+
 function haversineKm(a, b) {
   if (!Array.isArray(a) || !Array.isArray(b) || a.length < 2 || b.length < 2) return null;
   const lng1 = Number(a[0]);
@@ -479,6 +489,7 @@ qs('checkoutForm').addEventListener('submit', async (e) => {
     const courierCommission = computeCourierCommission(deliveryFee, DEFAULT_COURIER_COMMISSION_RATE);
     const now = Date.now();
     const trackingToken = generateToken();
+    const deliveryPin = generateDeliveryPin4();
 
     await update(ref(db, `users/${currentUser.uid}`), {
       email: currentUser.email || '',
@@ -528,6 +539,13 @@ qs('checkoutForm').addEventListener('submit', async (e) => {
       },
       createdAt: now,
       updatedAt: now
+    });
+
+    // Delivery PIN: only the customer can read it (rules), courier must ask for it at the door.
+    await set(ref(db, `orderPins/${orderId}`), {
+      code: deliveryPin,
+      createdAt: now,
+      usedAt: null
     });
 
     await set(deliveryRef, {
