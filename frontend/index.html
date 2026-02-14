@@ -608,7 +608,6 @@
 
     async function applyApkDownloadUrl() {
       if (!downloadApkTop && !downloadApkHero) return;
-      if (!isAndroid) return;
       const BACKEND_BASE_URL = 'https://windi-01ia.onrender.com';
       try {
         const r = await fetch(`${BACKEND_BASE_URL}/public-config`, { cache: 'no-store' });
@@ -618,10 +617,12 @@
         if (downloadApkTop) {
           downloadApkTop.href = apkUrl;
           downloadApkTop.style.display = '';
+          downloadApkTop.title = isAndroid ? '' : 'Descarga solo para Android';
         }
         if (downloadApkHero) {
           downloadApkHero.href = apkUrl;
           downloadApkHero.style.display = '';
+          downloadApkHero.title = isAndroid ? '' : 'Descarga solo para Android';
         }
       } catch {
         // keep hidden
