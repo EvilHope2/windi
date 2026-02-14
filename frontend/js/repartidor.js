@@ -9,6 +9,7 @@ import {
   ref,
   set,
   update,
+  runTransaction,
   query,
   orderByChild,
   equalTo,
@@ -30,6 +31,12 @@ const stopTrackingBtn = qs('stopTrackingBtn');
 const deliverBtn = qs('deliverBtn');
 const cancelBtn = qs('cancelBtn');
 const markPickedUpBtn = qs('markPickedUpBtn');
+const navVoiceBtn = qs('navVoiceBtn');
+const navFallback = qs('navFallback');
+const navFallbackOpenBtn = qs('navFallbackOpenBtn');
+const navShareBtn = qs('navShareBtn');
+const navCopyBtn = qs('navCopyBtn');
+const navUrlText = qs('navUrlText');
 const navEtaInfo = qs('navEtaInfo');
 const logoutBtn = qs('logoutBtn');
 const mapInfo = qs('mapInfo');
@@ -76,6 +83,7 @@ let profileApproved = false;
 const DEFAULT_CURRENCY = 'ARS';
 let gpsStatus = 'searching';
 let currentPosition = null;
+let lastNavUrl = '';
 let ordersCache = null;
 
 function normalizeArWhatsApp(raw) {
@@ -499,11 +507,135 @@ function refreshActionButtons() {
   cancelBtn.disabled = !hasActive;
   withdrawBtn.disabled = !profileApproved;
   if (markPickedUpBtn) markPickedUpBtn.disabled = !hasActive || !isPickupStage(activeOrder);
+  // Navigation is safe even if the profile is not approved, as long as there is an active order.
+  if (navVoiceBtn) navVoiceBtn.disabled = !activeOrder;
   updateGpsCard();
   updateDeliveryDistanceUi();
   updateCourierMapAndRoute().catch(() => {});
   updateQuickActionsUi();
   if (ordersCache) renderPedidos(ordersCache);
+}
+
+function buildGoogleMapsNavUrl({ origin, destination }) {
+  const dest = `${Number(destination.lat)},${Number(destination.lng)}`;
+  const params = new URLSearchParams({
+    api: '1',
+    destination: dest,
+    travelmode: 'driving',
+    dir_action: 'navigate'
+  });
+  if (origin && Number.isFinite(Number(origin.lat)) && Number.isFinite(Number(origin.lng))) {
+    params.set('origin', `${Number(origin.lat)},${Number(origin.lng)}`);
+  }
+  return `https://www.google.com/maps/dir/?${params.toString()}`;
+}
+
+function buildGoogleMapsIntentUrl({ destination }) {
+  // Forces hand-off to Google Maps app on Android (more reliable in TWA than window.open).
+  const dest = `${Number(destination.lat)},${Number(destination.lng)}`;
+  const httpsPath = `www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(dest)}&travelmode=driving&dir_action=navigate`;
+  return `intent://${httpsPath}#Intent;scheme=https;package=com.google.android.apps.maps;end`;
+}
+
+function buildGeoIntentUrl({ destination }) {
+  const dest = `${Number(destination.lat)},${Number(destination.lng)}`;
+  return `geo:0,0?q=${encodeURIComponent(dest)}`;
+}
+
+function buildWindiNavUrl({ destination }) {
+  const dest = `${Number(destination.lat)},${Number(destination.lng)}`;
+  // Custom scheme handled by the Android wrapper (NavActivity) to open Google Maps with voice.
+  return `windi-nav://navigate?dest=${encodeURIComponent(dest)}`;
+}
+
+function openVoiceNavigation() {
+  if (!activeOrder) return setStatus('No hay pedido activo.');
+  const pickup = getPickupGeo(activeOrder);
+  const dropoff = resolveDestinationGeo(activeOrder);
+  const target = isPickupStage(activeOrder) ? pickup : dropoff;
+  if (!target || !Number.isFinite(Number(target.lat)) || !Number.isFinite(Number(target.lng))) {
+    return setStatus('Este pedido no tiene coordenadas para navegar.');
+  }
+
+  setStatus('Abriendo navegacion con voz...');
+  const origin = currentPosition
+    ? { lat: currentPosition.lat, lng: currentPosition.lng }
+    : null;
+
+  const dest = { lat: Number(target.lat), lng: Number(target.lng) };
+  const url = buildGoogleMapsNavUrl({ origin, destination: dest });
+  lastNavUrl = url;
+
+  // Always show a manual fallback link (helps when TWA blocks external navigation attempts).
+  try {
+    if (navFallback) navFallback.classList.remove('hidden');
+    if (navUrlText) navUrlText.textContent = url;
+  } catch {}
+
+  // Android: prefer opening the native Maps app with voice navigation when possible.
+  // If the scheme is not supported, the browser will ignore it and we fall back to https.
+  const ua = (navigator.userAgent || '').toLowerCase();
+  const isAndroid = ua.includes('android');
+  if (isAndroid) {
+    try {
+      // Most reliable in our APK/TWA: custom scheme handled by native code which opens Maps.
+      window.location.assign(buildWindiNavUrl({ destination: dest }));
+      // Fallbacks in case the intent is blocked/not handled.
+      setTimeout(() => {
+        try { window.location.assign(buildGoogleMapsIntentUrl({ destination: dest })); } catch {}
+      }, 500);
+      setTimeout(() => {
+        try { window.location.assign(`google.navigation:q=${dest.lat},${dest.lng}&mode=d`); } catch {}
+      }, 900);
+      setTimeout(() => {
+        try {
+          // Web URL fallback (may open inside TWA; Maps often offers to "open in app").
+          window.location.href = url;
+        } catch {
+          window.location.href = url;
+        }
+      }, 1300);
+      return;
+    } catch {
+      // fall through
+    }
+  }
+
+  // Non-Android (or fallback): open a normal URL.
+  try {
+    const w = window.open(url, '_blank', 'noopener,noreferrer');
+    if (!w) window.location.href = url;
+  } catch {
+    window.location.href = url;
+  }
+}
+
+async function shareNavLink() {
+  if (!lastNavUrl) return setStatus('No hay link para compartir.');
+  try {
+    if (navigator.share) {
+      await navigator.share({ title: 'Windi - Navegacion', url: lastNavUrl });
+      return;
+    }
+  } catch {}
+  await copyNavLink();
+}
+
+async function copyNavLink() {
+  if (!lastNavUrl) return setStatus('No hay link para copiar.');
+  try {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(lastNavUrl);
+      setStatus('Link copiado.');
+      return;
+    }
+  } catch {}
+  // Fallback: best effort prompt (works in many WebViews).
+  try {
+    window.prompt('Copia este link:', lastNavUrl);
+  } catch {
+    setStatus('No se pudo copiar el link.');
+  }
 }
 
 function setActiveOrder(order, id) {
@@ -927,6 +1059,13 @@ async function markDelivered() {
 }
 
 deliverBtn.addEventListener('click', markDelivered);
+if (navVoiceBtn) navVoiceBtn.addEventListener('click', openVoiceNavigation);
+if (navFallbackOpenBtn) navFallbackOpenBtn.addEventListener('click', () => {
+  if (!lastNavUrl) return setStatus('No hay link de navegacion.');
+  try { window.location.href = lastNavUrl; } catch { setStatus('No se pudo abrir Google Maps.'); }
+});
+if (navShareBtn) navShareBtn.addEventListener('click', shareNavLink);
+if (navCopyBtn) navCopyBtn.addEventListener('click', copyNavLink);
 
 cancelBtn.addEventListener('click', async () => {
   if (!profileApproved) return setStatus('Tu perfil aun no esta aprobado.');
@@ -974,21 +1113,39 @@ function renderPedidos(data) {
   const availableEntries = Object.entries(data)
     .filter(([, p]) => {
       const state = (p?.estado || '').toString().toLowerCase();
-      const isAvailableState = state === 'buscando' || state === 'esperando-comercio';
+      // Only show orders that the commerce explicitly published for couriers.
+      const isAvailableState = state === 'buscando';
       const isUnassigned = !p?.repartidorId;
       return isAvailableState && isUnassigned;
     })
-    .sort((a, b) => (b[1].createdAt || 0) - (a[1].createdAt || 0));
+    .map(([id, p]) => {
+      const pickup = p?.origenGeo;
+      const my = currentPosition ? { lng: currentPosition.lng, lat: currentPosition.lat } : null;
+      const distKm = my && pickup && Number.isFinite(Number(pickup.lng)) && Number.isFinite(Number(pickup.lat))
+        ? (haversineMeters(my, { lng: Number(pickup.lng), lat: Number(pickup.lat) }) / 1000)
+        : null;
+      return [id, p, distKm];
+    })
+    // Closest first (when GPS available), otherwise newest first.
+    .sort((a, b) => {
+      const da = a[2];
+      const dbb = b[2];
+      if (da != null && dbb != null) return da - dbb;
+      if (da != null && dbb == null) return -1;
+      if (da == null && dbb != null) return 1;
+      return (b[1].createdAt || 0) - (a[1].createdAt || 0);
+    });
 
   if (!availableEntries.length) {
     pedidosList.innerHTML = '<div class="item"><div class="muted">No hay pedidos disponibles ahora. Actualiza en unos segundos.</div></div>';
     return;
   }
 
-  availableEntries.forEach(([id, p]) => {
+  availableEntries.forEach(([id, p, distKm]) => {
     const div = document.createElement('div');
     div.className = 'item';
     const kmText = p.km != null ? `${p.km} km` : 'Km -';
+    const nearText = distKm != null ? ` | Cerca: ${Math.round(distKm * 10) / 10} km` : '';
     const payout = p.payout ?? p.precio;
     const method = String(p.pagoMetodo || '').toLowerCase();
     const pagoLabel = method === 'cash_delivery'
@@ -1002,7 +1159,7 @@ function renderPedidos(data) {
         <strong>${p.origen} -> ${p.destino}</strong>
         <span class="status ${p.estado}">${p.estado}</span>
       </div>
-      <div class="muted">${kmText} | Tarifa: ${fmtMoney(payout)}</div>
+      <div class="muted">${kmText}${nearText} | Tarifa: ${fmtMoney(payout)}</div>
       <div class="muted">Pago: ${pagoLabel}</div>
       <div class="muted">Notas: ${p.notas || '-'}</div>
       ${canTake ? '' : '<div class="muted">Habilita GPS con buena precision para tomar pedidos.</div>'}
@@ -1050,24 +1207,29 @@ function renderHistorial(data) {
 async function aceptarPedido(id) {
   if (!profileApproved) return setStatus('Tu perfil aun no esta aprobado.');
   if (!canTakeOrders()) return setStatus('Activa GPS con precision suficiente para tomar pedidos.');
-  const orderSnap = await get(ref(db, `orders/${id}`));
-  const order = orderSnap.val();
-  if (!order) return setStatus('Pedido no encontrado.');
-  const estado = (order.estado || '').toString().toLowerCase();
-  if (estado !== 'buscando' && estado !== 'esperando-comercio') {
+  const now = Date.now();
+
+  // Atomic claim: only one courier can accept.
+  const orderRef = ref(db, `orders/${id}`);
+  const tx = await runTransaction(orderRef, (current) => {
+    if (!current) return current;
+    const estado = (current.estado || '').toString().toLowerCase();
+    if (estado !== 'buscando') return; // abort
+    if (current.repartidorId) return; // abort
+    return {
+      ...current,
+      estado: 'en-camino-retiro',
+      repartidorId: auth.currentUser.uid,
+      acceptedAt: now,
+      updatedAt: now
+    };
+  });
+
+  if (!tx.committed) {
     return setStatus('Este pedido ya no esta disponible para aceptar.');
   }
-  if (order.repartidorId) {
-    return setStatus('Este pedido ya fue asignado.');
-  }
 
-  const now = Date.now();
-  await update(ref(db, `orders/${id}`), {
-    estado: 'en-camino-retiro',
-    repartidorId: auth.currentUser.uid,
-    acceptedAt: now,
-    updatedAt: now
-  });
+  const order = tx.snapshot.val();
   if (order.marketplaceOrderId) {
     await update(ref(db, `marketplaceOrders/${order.marketplaceOrderId}`), {
       orderStatus: 'assigned',

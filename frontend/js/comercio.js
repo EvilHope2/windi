@@ -639,6 +639,44 @@ async function cancelarPedido(id, token) {
   }
 }
 
+async function cambiarEstadoPedido({ id, order, nextEstado }) {
+  const now = Date.now();
+  const trackingToken = order?.trackingToken;
+  if (!trackingToken) throw new Error('Tracking no disponible.');
+
+  await update(ref(db, `orders/${id}`), {
+    estado: nextEstado,
+    updatedAt: now
+  });
+
+  await update(ref(db, `publicTracking/${trackingToken}`), {
+    estado: nextEstado,
+    updatedAt: now
+  });
+
+  // Keep marketplace order status in sync when this order comes from marketplace.
+  if (order?.marketplaceOrderId) {
+    const map = {
+      preparando: 'preparing',
+      'listo-para-retirar': 'ready_for_pickup',
+      buscando: 'ready_for_pickup'
+    };
+    const orderStatus = map[nextEstado] || null;
+    if (orderStatus) {
+      await update(ref(db, `marketplaceOrders/${order.marketplaceOrderId}`), {
+        orderStatus,
+        updatedAt: now
+      });
+      await set(push(ref(db, `marketplaceOrderStatusLog/${order.marketplaceOrderId}`)), {
+        status: orderStatus,
+        actorId: auth.currentUser.uid,
+        actorRole: 'comercio',
+        createdAt: now
+      });
+    }
+  }
+}
+
 function selectOrderForMap(order) {
   selectedOrderId = order ? order.id : null;
   resetMap();
@@ -689,11 +727,72 @@ function renderPedidos(data) {
       <div class="muted">Notas: ${p.notas || '-'}</div>
       <div class="muted">Tracking: <a href="${trackingUrl}">${trackingUrl}</a></div>
       ${isClosed ? `<div class="muted">Cerrado: ${fmtTime(closedTime)}</div>` : ''}
-      ${!isClosed ? `<div class="row"><button data-action="cancelar" class="danger">Cancelar</button></div>` : ''}
+      ${!isClosed ? `<div class="row order-actions"></div>` : ''}
     `;
 
     if (!isClosed) {
-      div.querySelector('button[data-action="cancelar"]').addEventListener('click', () => cancelarPedido(id, p.trackingToken));
+      const actionsRow = div.querySelector('.order-actions');
+
+      function addBtn(label, action, cls = '') {
+        const b = document.createElement('button');
+        if (cls) b.className = cls;
+        b.textContent = label;
+        b.dataset.action = action;
+        actionsRow.appendChild(b);
+        return b;
+      }
+
+      const estado = (p.estado || '').toString().toLowerCase();
+
+      // Status flow:
+      // esperando-comercio -> preparando -> listo-para-retirar -> buscando -> en-camino-retiro -> ...
+      if (estado === 'esperando-comercio') {
+        addBtn('Marcar preparando', 'preparando');
+        addBtn('Marcar listo', 'listo', 'secondary');
+      } else if (estado === 'preparando') {
+        addBtn('Marcar listo', 'listo');
+      } else if (estado === 'listo-para-retirar') {
+        addBtn('Pedir delivery', 'buscar', 'cta');
+      } else if (estado === 'buscando') {
+        const msg = document.createElement('div');
+        msg.className = 'muted';
+        msg.textContent = 'Buscando repartidor cercano...';
+        actionsRow.appendChild(msg);
+      }
+
+      // Always allow cancel while not closed.
+      addBtn('Cancelar', 'cancelar', 'danger');
+
+      actionsRow.addEventListener('click', async (e) => {
+        const btn = e.target && e.target.closest ? e.target.closest('button[data-action]') : null;
+        if (!btn) return;
+        const action = btn.dataset.action;
+        try {
+          if (action === 'cancelar') {
+            await cancelarPedido(id, p.trackingToken);
+            return;
+          }
+          if (action === 'preparando') {
+            await cambiarEstadoPedido({ id, order: p, nextEstado: 'preparando' });
+            setStatus('Pedido marcado como preparando.');
+            return;
+          }
+          if (action === 'listo') {
+            await cambiarEstadoPedido({ id, order: p, nextEstado: 'listo-para-retirar' });
+            setStatus('Pedido listo para retirar.');
+            return;
+          }
+          if (action === 'buscar') {
+            // Publish to couriers: only orders in estado=buscando are shown on repartidor panel.
+            await cambiarEstadoPedido({ id, order: p, nextEstado: 'buscando' });
+            setStatus('Buscando repartidor. Se mostrara a los mas cercanos.');
+            return;
+          }
+        } catch (err) {
+          setStatus(err.message);
+        }
+      });
+
       pedidosList.appendChild(div);
       activeCount += 1;
       if (!firstActive) {

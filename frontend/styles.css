@@ -1595,6 +1595,20 @@ a.badge {
 
 .primary-cta:active { transform: translateY(1px); }
 
+/* Small helper classes used in legacy panels */
+button.secondary {
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid rgba(15, 23, 42, 0.18);
+  color: var(--windi-text-primary);
+}
+
+button.cta {
+  background: linear-gradient(135deg, var(--windi-primary) 0%, var(--windi-primary-dark) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  color: #fff;
+  box-shadow: 0 12px 24px rgba(220, 38, 38, 0.2);
+}
+
 .fab-support {
   position: fixed;
   right: 14px;

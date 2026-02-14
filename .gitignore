@@ -9,6 +9,7 @@ app/build/
 
 *.apk
 *.idsig
+*.aab
 *.keystore
 local.properties
 

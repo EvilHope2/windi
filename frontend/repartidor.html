@@ -131,6 +131,16 @@
         <div id="navEtaInfo" class="muted">Sin ruta activa.</div>
         <div id="mapInfo" class="muted">Acepta un pedido para ver el mapa y la ruta.</div>
         <div id="map" class="map"></div>
+        <button id="navVoiceBtn" class="secondary" type="button">Navegar con voz</button>
+        <div id="navFallback" class="hidden" style="margin-top:10px;">
+          <div class="muted">Si no se abre automaticamente, toca el boton:</div>
+          <button id="navFallbackOpenBtn" class="primary-cta" type="button">Abrir Google Maps</button>
+          <div class="row" style="margin-top:10px;">
+            <button id="navShareBtn" class="secondary" type="button">Compartir link</button>
+            <button id="navCopyBtn" class="secondary" type="button">Copiar link</button>
+          </div>
+          <div id="navUrlText" class="muted" style="margin-top:8px; word-break: break-word;"></div>
+        </div>
         <button id="markPickedUpBtn">Marcar retirado</button>
         
         <div class="quick-actions">

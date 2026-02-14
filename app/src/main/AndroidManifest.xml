@@ -159,6 +159,20 @@
             
         </activity>
 
+        <!-- Bridge activity to open Google Maps navigation from the TWA -->
+        <activity
+            android:name=".NavActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="windi-nav" android:host="navigate" />
+            </intent-filter>
+        </activity>
+
         <activity android:name="com.google.androidbrowserhelper.trusted.FocusActivity" />
 
         <activity android:name="com.google.androidbrowserhelper.trusted.WebViewFallbackActivity"
