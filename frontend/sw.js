@@ -1,4 +1,4 @@
-const CACHE = 'delirg-v13';
+const CACHE = 'delirg-v14';
 const ASSETS = [
   '/',
   '/index.html',
