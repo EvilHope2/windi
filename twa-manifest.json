@@ -21,8 +21,8 @@
     "path": "C:\\Users\\nahuy\\Desktop\\Empresa\\delirg\\delirg.keystore",
     "alias": "delirg"
   },
-  "appVersionName": "6",
-  "appVersionCode": 6,
+  "appVersionName": "7",
+  "appVersionCode": 7,
   "shortcuts": [],
   "generatorApp": "bubblewrap-cli",
   "webManifestUrl": "https://windi-rg-121f8.web.app/manifest.json",
@@ -48,5 +48,5 @@
   "fileHandlers": [],
   "launchHandlerClientMode": "",
   "displayOverride": [],
-  "appVersion": "6"
+  "appVersion": "7"
 }
