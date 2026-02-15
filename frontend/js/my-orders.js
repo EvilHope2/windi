@@ -1,6 +1,6 @@
 ﻿import { auth, db } from './firebase.js';
 import { onAuthStateChanged } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-auth.js';
-import { ref, onValue } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-database.js';
+import { ref, onValue, query, orderByChild, equalTo } from 'https://www.gstatic.com/firebasejs/9.23.0/firebase-database.js';
 import { qs, fmtMoney, fmtTime } from './utils.js';
 
 const authInfo = qs('authInfo');
@@ -17,11 +17,10 @@ onAuthStateChanged(auth, (user) => {
   }
 
   authInfo.textContent = user.email ? `Sesion: ${user.email}` : 'Sesion activa';
-  onValue(ref(db, 'marketplaceOrders'), (snap) => {
+  const ordersRef = query(ref(db, 'marketplaceOrders'), orderByChild('customerId'), equalTo(user.uid));
+  onValue(ordersRef, (snap) => {
     const all = snap.val() || {};
-    const entries = Object.entries(all)
-      .filter(([, o]) => o.customerId === user.uid)
-      .sort((a, b) => (b[1].createdAt || 0) - (a[1].createdAt || 0));
+    const entries = Object.entries(all).sort((a, b) => (b[1].createdAt || 0) - (a[1].createdAt || 0));
 
     ordersList.innerHTML = '';
     if (!entries.length) {

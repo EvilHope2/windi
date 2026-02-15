@@ -7,6 +7,9 @@ import {
 import {
   ref,
   onValue,
+  query,
+  orderByChild,
+  equalTo,
   set,
   update,
   push,
@@ -256,7 +259,8 @@ onAuthStateChanged(auth, async (user) => {
     renderProducts();
   });
 
-  onValue(ref(db, 'marketplaceOrders'), (snap) => {
+  const ordersRef = query(ref(db, 'marketplaceOrders'), orderByChild('merchantId'), equalTo(currentUser.uid));
+  onValue(ordersRef, (snap) => {
     allOrders = snap.val() || {};
     renderOrders();
   });
