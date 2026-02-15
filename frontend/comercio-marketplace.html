@@ -1,11 +1,19 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="es">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Windi | Comercio Marketplace</title>
   <link rel="manifest" href="/manifest.json" />
-  <link rel="stylesheet" href="/styles.css" />
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+
+  <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png" />
+
+  <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192.png" />
+
+  <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+
+<link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
   <div class="app-shell">
@@ -28,7 +36,7 @@
       </div>
 
       <div id="authSection" class="card">
-        <div class="title-row"><span class="icon">🔐</span><h2>Ingreso comercio</h2></div>
+        <div class="title-row"><span class="icon">??</span><h2>Ingreso comercio</h2></div>
         <input id="loginEmail" type="email" placeholder="Email" />
         <input id="loginPassword" type="password" placeholder="Contrasena" />
         <button id="loginBtn">Ingresar</button>
@@ -36,7 +44,7 @@
 
       <div id="appSection" class="grid hidden">
         <div class="card" id="products">
-          <div class="title-row"><span class="icon">📦</span><h2>Productos</h2></div>
+          <div class="title-row"><span class="icon">??</span><h2>Productos</h2></div>
           <form id="productForm">
             <input id="pName" placeholder="Nombre" required />
             <textarea id="pDesc" placeholder="Descripcion"></textarea>
@@ -50,7 +58,7 @@
         </div>
 
         <div class="card" id="orders">
-          <div class="title-row"><span class="icon">🧾</span><h2>Pedidos marketplace</h2></div>
+          <div class="title-row"><span class="icon">??</span><h2>Pedidos marketplace</h2></div>
           <div id="ordersList" class="list"></div>
         </div>
       </div>
